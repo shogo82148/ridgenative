@@ -59,7 +59,10 @@ func (r *request) httpRequest() (*http.Request, error) {
 	for k, v := range r.QueryStringParameters {
 		values.Add(k, v)
 	}
-	uri := r.Path + "?" + values.Encode()
+	uri := r.Path
+	if len(values) > 0 {
+		uri = uri + "?" + values.Encode()
+	}
 	u, err := url.Parse(uri)
 	if err != nil {
 		return nil, err
