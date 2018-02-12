@@ -3,8 +3,12 @@ package ridgenative
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
+	"io"
+	"io/ioutil"
 	"net/http"
 	"net/url"
+	"strings"
 
 	"github.com/aws/aws-lambda-go/lambda"
 )
@@ -68,15 +72,42 @@ func (r *request) httpRequest() (*http.Request, error) {
 		return nil, err
 	}
 
+	var contentLength int64
+	var body io.ReadCloser
+	if r.Body != nil {
+		contentLength = int64(len(*r.Body))
+		reader := io.Reader(strings.NewReader(*r.Body))
+		if r.IsBase64Encoded {
+			// ignore padding
+			if contentLength > 0 && (*r.Body)[contentLength-1] == '=' {
+				contentLength--
+			}
+			if contentLength > 0 && (*r.Body)[contentLength-1] == '=' {
+				contentLength--
+			}
+			if contentLength > 0 && (*r.Body)[contentLength-1] == '=' {
+				contentLength--
+			}
+
+			contentLength = contentLength * 3 / 4
+			reader = base64.NewDecoder(base64.StdEncoding, reader)
+		}
+		body = ioutil.NopCloser(reader)
+	} else {
+		body = http.NoBody
+	}
+
 	return &http.Request{
-		Method:     r.HTTPMethod,
-		Proto:      "HTTP/1.1",
-		ProtoMajor: 1,
-		ProtoMinor: 1,
-		Header:     headers,
-		RemoteAddr: r.RequestContext.Identity["sourceIp"],
-		RequestURI: uri,
-		URL:        u,
+		Method:        r.HTTPMethod,
+		Proto:         "HTTP/1.1",
+		ProtoMajor:    1,
+		ProtoMinor:    1,
+		Header:        headers,
+		RemoteAddr:    r.RequestContext.Identity["sourceIp"],
+		ContentLength: contentLength,
+		Body:          body,
+		RequestURI:    uri,
+		URL:           u,
 	}, nil
 }
 
