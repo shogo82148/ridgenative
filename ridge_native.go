@@ -10,50 +10,16 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
 )
-
-type request struct {
-	Body                  *string           `json:"body"`
-	Headers               map[string]string `json:"headers"`
-	HTTPMethod            string            `json:"httpMethod"`
-	IsBase64Encoded       bool              `json:"isBase64Encoded"`
-	Path                  string            `json:"path"`
-	PathParameters        map[string]string `json:"pathParameters"`
-	QueryStringParameters map[string]string `json:"queryStringParameters"`
-	RequestContext        requestContext    `json:"requestContext"`
-	Resource              string            `json:"resource"`
-	StageVariables        map[string]string `json:"stageVariables"`
-}
-
-type requestContext struct {
-	AccountID        string            `json:"accountId"`
-	APIID            string            `json:"apiId"`
-	HTTPMethod       string            `json:"httpMethod"`
-	Identity         map[string]string `json:"identity"`
-	Path             string            `json:"path"`
-	Protocol         string            `json:"protocol"`
-	RequestID        string            `json:"requestId"`
-	RequestTime      string            `json:"requestTime"`
-	RequestTimeEpoch int64             `json:"requestTimeEpoch"`
-	ResourceID       string            `json:"resourceId"`
-	ResourcePath     string            `json:"resourcePath"`
-	Stage            string            `json:"stage"`
-}
-
-type response struct {
-	IsBase64Encoded bool              `json:"isBase64Encoded"`
-	StatusCode      int               `json:"statusCode"`
-	Headers         map[string]string `json:"headers"`
-	Body            string            `json:"body"`
-}
 
 type lambdaFunction struct {
 	prefix string
 	mux    http.Handler
 }
 
-func (r *request) httpRequest() (*http.Request, error) {
+func httpRequest(r events.APIGatewayProxyRequest) (*http.Request, error) {
 	headers := http.Header{}
 	for k, v := range r.Headers {
 		headers.Add(k, v)
@@ -74,18 +40,18 @@ func (r *request) httpRequest() (*http.Request, error) {
 
 	var contentLength int64
 	var body io.ReadCloser
-	if r.Body != nil {
-		contentLength = int64(len(*r.Body))
-		reader := io.Reader(strings.NewReader(*r.Body))
+	if r.Body != "" {
+		contentLength = int64(len(r.Body))
+		reader := io.Reader(strings.NewReader(r.Body))
 		if r.IsBase64Encoded {
 			// ignore padding
-			if contentLength > 0 && (*r.Body)[contentLength-1] == '=' {
+			if contentLength > 0 && r.Body[contentLength-1] == '=' {
 				contentLength--
 			}
-			if contentLength > 0 && (*r.Body)[contentLength-1] == '=' {
+			if contentLength > 0 && r.Body[contentLength-1] == '=' {
 				contentLength--
 			}
-			if contentLength > 0 && (*r.Body)[contentLength-1] == '=' {
+			if contentLength > 0 && r.Body[contentLength-1] == '=' {
 				contentLength--
 			}
 
@@ -103,7 +69,7 @@ func (r *request) httpRequest() (*http.Request, error) {
 		ProtoMajor:    1,
 		ProtoMinor:    1,
 		Header:        headers,
-		RemoteAddr:    r.RequestContext.Identity["sourceIp"],
+		RemoteAddr:    r.RequestContext.Identity.SourceIP,
 		ContentLength: contentLength,
 		Body:          body,
 		RequestURI:    uri,
@@ -133,23 +99,23 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 }
 
-func (rw *responseWriter) lambdaResponse() (*response, error) {
+func (rw *responseWriter) lambdaResponse() (events.APIGatewayProxyResponse, error) {
 	h := make(map[string]string, len(rw.header))
 	for key := range rw.header {
 		h[key] = rw.header.Get(key)
 	}
 
-	return &response{
+	return events.APIGatewayProxyResponse{
 		StatusCode: rw.statusCode,
 		Headers:    h,
 		Body:       rw.String(),
 	}, nil
 }
 
-func (f lambdaFunction) lambdaHandler(ctx context.Context, req *request) (*response, error) {
-	r, err := req.httpRequest()
+func (f lambdaFunction) lambdaHandler(ctx context.Context, req events.APIGatewayProxyRequest) (events.APIGatewayProxyResponse, error) {
+	r, err := httpRequest(req)
 	if err != nil {
-		return nil, err
+		return events.APIGatewayProxyResponse{}, err
 	}
 	r = r.WithContext(ctx)
 	rw := newResponseWriter()
