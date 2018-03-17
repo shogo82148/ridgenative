@@ -134,7 +134,7 @@ func Run(address, prefix string, mux http.Handler) {
 		mux = http.DefaultServeMux
 	}
 	f := lambdaFunction{prefix: prefix, mux: mux}
-	if os.Getenv("AWS_EXECUTION_ENV") != "" {
+	if os.Getenv("LAMBDA_TASK_ROOT") != "" {
 		f.run()
 	} else {
 		m := http.NewServeMux()
