@@ -8,6 +8,7 @@ import (
 	"io/ioutil"
 	"net/http"
 	"net/url"
+	"os"
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
@@ -123,11 +124,21 @@ func (f lambdaFunction) lambdaHandler(ctx context.Context, req events.APIGateway
 	return rw.lambdaResponse()
 }
 
+func (f lambdaFunction) run() {
+	lambda.Start(f.lambdaHandler)
+}
+
 // Run runs http handler on Apex or net/http's server.
 func Run(address, prefix string, mux http.Handler) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
 	f := lambdaFunction{prefix: prefix, mux: mux}
-	lambda.Start(f.lambdaHandler)
+	if os.Getenv("AWS_EXECUTION_ENV") != "" {
+		f.run()
+	} else {
+		m := http.NewServeMux()
+		m.Handle(prefix+"/", http.StripPrefix(prefix, mux))
+		http.ListenAndServe(address, m)
+	}
 }

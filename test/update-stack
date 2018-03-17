@@ -1,0 +1,25 @@
+#!/usr/bin/env bash
+
+set -xue
+
+ROOT=$(cd "$(dirname "$0")" && pwd)
+STACK_NAME=$1
+TEMPLATE=$2
+
+: validating template
+aws cloudformation validate-template --template-body "file://${ROOT}/${TEMPLATE}"
+
+: upload lambda funcion
+MD5=$(openssl dgst -md5 -binary dist.zip | openssl enc -base64)
+OBJECT=$(aws --output json s3api put-object --bucket "$BUCKET_NAME" --key dist.zip --body dist.zip --content-md5 "$MD5")
+VERSION=$(echo "$OBJECT" | jq -r .VersionId)
+
+: create cloudformation stack
+aws cloudformation update-stack \
+    --stack-name "$STACK_NAME" \
+    --template-body "file://${ROOT}/${TEMPLATE}" \
+    --parameters "ParameterKey=BucketName,ParameterValue=$BUCKET_NAME" \
+        "ParameterKey=Version,ParameterValue=$VERSION" \
+    --capabilities CAPABILITY_IAM
+
+aws cloudformation wait stack-update-complete --stack-name "$STACK_NAME"

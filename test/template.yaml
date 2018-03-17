@@ -1,0 +1,92 @@
+AWSTemplateFormatVersion: "2010-09-09"
+Description: test stack for shogo82148/ridgenative
+
+# Input parameters.
+Parameters:
+  BucketName:
+    Type: String
+    Description: "S3 Bucket of dist.zip"    
+  Version:
+    Type: String
+    Description: "Version of dist.zip"
+
+# Resource definitions.
+Resources:
+  Function:
+    Type: AWS::Lambda::Function
+    DependsOn: LambdaExecutionRole
+    Properties:
+      Code:
+        S3Bucket: !Ref BucketName
+        S3Key: dist.zip
+        S3ObjectVersion: !Ref Version
+      Handler: main
+      Role: !GetAtt LambdaExecutionRole.Arn
+      Runtime: go1.x
+  LambdaExecutionRole:
+      Type: AWS::IAM::Role
+      Properties:
+        AssumeRolePolicyDocument:
+          Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+              - lambda.amazonaws.com
+            Action:
+            - sts:AssumeRole
+        Path: "/"
+        Policies:
+        - PolicyName: CloudWatchLogs
+          PolicyDocument:
+            Statement:
+            - Effect: Allow
+              Action:
+              - logs:CreateLogGroup
+              - logs:CreateLogStream
+              - logs:PutLogEvents
+              Resource: arn:aws:logs:*:*:*
+  # API Gateway Lambda Proxy Integration
+  # http://docs.aws.amazon.com/ja_jp/AWSCloudFormation/latest/UserGuide/aws-resource-apigateway-method.html
+  RestApi:
+    Type: AWS::ApiGateway::RestApi
+    Properties:
+      Description: test api for shogo82148/ridgenative
+      Name: shogo82148-ridgenative
+  RestApiResource:
+    Type: AWS::ApiGateway::Resource
+    DependsOn: RestApi
+    Properties:
+      RestApiId: !Ref RestApi
+      ParentId: !GetAtt RestApi.RootResourceId
+      PathPart: "{proxy+}"
+  RestApiResourceANY:
+    Type: AWS::ApiGateway::Method
+    DependsOn: [Function, RestApi, RestApiResource]
+    Properties:
+      RestApiId: !Ref RestApi
+      ResourceId: !Ref RestApiResource
+      HttpMethod: ANY
+      AuthorizationType: NONE
+      Integration:
+        Type: AWS_PROXY
+        IntegrationHttpMethod: POST # http://keiwt.hatenablog.com/entry/2016/07/17/205456
+        Uri: !Sub arn:aws:apigateway:${AWS::Region}:lambda:path/2015-03-31/functions/${Function.Arn}/invocations
+  RestApiPermission:
+    Type: AWS::Lambda::Permission
+    DependsOn: Function
+    Properties:
+      Action: lambda:InvokeFunction
+      FunctionName: !GetAtt Function.Arn
+      Principal: apigateway.amazonaws.com
+  RestApiDeployment:
+    Type: AWS::ApiGateway::Deployment
+    DependsOn: RestApiResourceANY
+    Properties:
+      RestApiId: !Ref RestApi
+  RestApiStage:
+    Type: AWS::ApiGateway::Stage
+    DependsOn: [RestApiDeployment, RestApi]
+    Properties:
+      DeploymentId: !Ref RestApiDeployment
+      RestApiId: !Ref RestApi
+      StageName: test
