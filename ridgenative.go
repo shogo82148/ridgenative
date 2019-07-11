@@ -56,7 +56,7 @@ type requestContext struct {
 func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 	// decode header
 	var headers http.Header
-	if r.MultiValueHeaders != nil {
+	if len(r.MultiValueHeaders) > 0 {
 		headers = make(http.Header, len(r.MultiValueHeaders))
 		for k, v := range r.MultiValueHeaders {
 			headers[textproto.CanonicalMIMEHeaderKey(k)] = v
@@ -71,12 +71,13 @@ func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 
 	// decode query string
 	var values url.Values
-	if r.MultiValueQueryStringParameters != nil {
+	if len(r.MultiValueQueryStringParameters) > 0 {
 		values = make(url.Values, len(r.MultiValueQueryStringParameters))
 		for k, v := range r.MultiValueQueryStringParameters {
 			values[k] = v
 		}
-	} else if r.QueryStringParameters != nil {
+	} else if len(r.QueryStringParameters) > 0 {
+		// fall back to queryStringParameters
 		values = make(url.Values, len(r.QueryStringParameters))
 		for k, v := range r.QueryStringParameters {
 			values[k] = []string{v}
