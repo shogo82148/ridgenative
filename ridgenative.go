@@ -101,7 +101,11 @@ func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 		contentLength = int64(len(r.Body))
 		reader := io.Reader(strings.NewReader(r.Body))
 		if r.IsBase64Encoded {
-			contentLength = int64(base64.StdEncoding.DecodedLen(len(r.Body)))
+			// ignore padding
+			for contentLength > 0 && r.Body[contentLength-1] == '=' {
+				contentLength--
+			}
+			contentLength = contentLength * 3 / 4
 			reader = base64.NewDecoder(base64.StdEncoding, reader)
 		}
 		body = ioutil.NopCloser(reader)

@@ -88,6 +88,35 @@ func TestHTTPRequest(t *testing.T) {
 			t.Errorf("unexpected host: want %q, got %q", "lambda-test-1234567890.ap-northeast-1.elb.amazonaws.com", httpReq.Host)
 		}
 	})
+	t.Run("alb bse64 request", func(t *testing.T) {
+		req, err := loadRequest("testdata/alb-base64-request.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpReq, err := httpRequest(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if httpReq.Method != http.MethodPost {
+			t.Errorf("unexpected method: want %s, got %s", http.MethodPost, httpReq.Method)
+		}
+		if httpReq.RequestURI != "/foo/bar" {
+			t.Errorf("unexpected RequestURI: want %q, got %q", "/foo/bar", httpReq.RequestURI)
+		}
+		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
+			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
+		}
+		body, err := ioutil.ReadAll(httpReq.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "{\"hello\":\"world\"}" {
+			t.Errorf("unexpected body: want %q, got %q", "{\"hello\":\"world\"}", string(body))
+		}
+		if httpReq.Host != "lambda-test-1234567890.ap-northeast-1.elb.amazonaws.com" {
+			t.Errorf("unexpected host: want %q, got %q", "lambda-test-1234567890.ap-northeast-1.elb.amazonaws.com", httpReq.Host)
+		}
+	})
 }
 
 func Benchmark(b *testing.B) {
