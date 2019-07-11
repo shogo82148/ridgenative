@@ -3,6 +3,7 @@ package ridgenative
 import (
 	"context"
 	"encoding/json"
+	"io"
 	"io/ioutil"
 	"net/http"
 	"os"
@@ -65,7 +66,9 @@ func Benchmark(b *testing.B) {
 	if err != nil {
 		b.Fatal(err)
 	}
+	buf := make([]byte, 1024)
 	for i := 0; i < b.N; i++ {
-		httpRequest(context.Background(), req)
+		r, _ := httpRequest(context.Background(), req)
+		io.CopyBuffer(ioutil.Discard, r.Body, buf)
 	}
 }
