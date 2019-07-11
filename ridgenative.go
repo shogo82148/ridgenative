@@ -119,6 +119,7 @@ func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 		Body:          body,
 		RequestURI:    uri,
 		URL:           u,
+		Host:          headers.Get("Host"),
 	}
 	req = req.WithContext(ctx)
 	return req, nil

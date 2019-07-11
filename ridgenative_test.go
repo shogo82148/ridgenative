@@ -54,6 +54,9 @@ func TestHTTPRequest(t *testing.T) {
 		if string(body) != "" {
 			t.Errorf("unexpected body: want %q, got %q", "", string(body))
 		}
+		if httpReq.Host != "lambda-test-1062019563.ap-northeast-1.elb.amazonaws.com" {
+			t.Errorf("unexpected host: want %q, got %q", "lambda-test-1062019563.ap-northeast-1.elb.amazonaws.com", httpReq.Host)
+		}
 	})
 }
 
