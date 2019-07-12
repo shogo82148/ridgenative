@@ -1,7 +1,6 @@
 package ridgenative
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"io"
@@ -10,6 +9,7 @@ import (
 	"net/textproto"
 	"net/url"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -131,14 +131,22 @@ func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 }
 
 type responseWriter struct {
-	*bytes.Buffer
+	strings.Builder
 	header     http.Header
 	statusCode int
 }
 
+type response struct {
+	StatusCode        int                 `json:"statusCode"`
+	StatusDescription string              `json:"statusDescription"`
+	Headers           map[string]string   `json:"headers"`
+	MultiValueHeaders map[string][]string `json:"multiValueHeaders"`
+	Body              string              `json:"body"`
+	IsBase64Encoded   bool                `json:"isBase64Encoded"`
+}
+
 func newResponseWriter() *responseWriter {
 	return &responseWriter{
-		Buffer:     &bytes.Buffer{},
 		header:     http.Header{},
 		statusCode: http.StatusOK,
 	}
@@ -152,23 +160,44 @@ func (rw *responseWriter) WriteHeader(code int) {
 	rw.statusCode = code
 }
 
-func (rw *responseWriter) lambdaResponse() (events.APIGatewayProxyResponse, error) {
+func (rw *responseWriter) lambdaResponse() (response, error) {
+	body := rw.String()
+
+	// detect content type
+	if rw.header.Get("Content-Type") == "" {
+		l := len(body)
+		if l > 512 {
+			l = 512 // DetectContentType uses the first 512 bytes of data
+		}
+		contentType := http.DetectContentType([]byte(body[:l]))
+		rw.header.Set("Content-Type", contentType)
+	}
+
+	// fall back to headers if multiValueHeaders is not available
 	h := make(map[string]string, len(rw.header))
 	for key := range rw.header {
 		h[key] = rw.header.Get(key)
 	}
 
-	return events.APIGatewayProxyResponse{
-		StatusCode: rw.statusCode,
-		Headers:    h,
-		Body:       rw.String(),
+	var isBase64 bool
+	if !utf8.ValidString(body) {
+		isBase64 = true
+		body = base64.StdEncoding.EncodeToString([]byte(body))
+	}
+
+	return response{
+		StatusCode:        rw.statusCode,
+		Headers:           h,
+		MultiValueHeaders: map[string][]string(rw.header),
+		Body:              body,
+		IsBase64Encoded:   isBase64,
 	}, nil
 }
 
-func (f lambdaFunction) lambdaHandler(ctx context.Context, req request) (events.APIGatewayProxyResponse, error) {
+func (f lambdaFunction) lambdaHandler(ctx context.Context, req request) (response, error) {
 	r, err := httpRequest(ctx, req)
 	if err != nil {
-		return events.APIGatewayProxyResponse{}, err
+		return response{}, err
 	}
 	rw := newResponseWriter()
 	f.mux.ServeHTTP(rw, r)

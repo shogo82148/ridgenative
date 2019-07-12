@@ -209,6 +209,54 @@ func TestHTTPRequest(t *testing.T) {
 	})
 }
 
+func TestResponse(t *testing.T) {
+	t.Run("normal", func(t *testing.T) {
+		rw := newResponseWriter()
+		rw.Header().Add("foo", "foo")
+		rw.Header().Add("bar", "bar1")
+		rw.Header().Add("bar", "bar2")
+
+		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
+			t.Error(err)
+		}
+		if _, err := rw.Write([]byte("<html><body>Hello!</body></html>")); err != nil {
+			t.Error(err)
+		}
+
+		resp, err := rw.lambdaResponse()
+		if err != nil {
+			t.Error(err)
+		}
+		if resp.Headers["Foo"] != "foo" {
+			t.Errorf("unexpected header: want %q, got %q", "foo", resp.Headers["Foo"])
+		}
+		if resp.Headers["Bar"] != "bar1" {
+			t.Errorf("unexpected header: want %q, got %q", "foo", resp.Headers["Foo"])
+		}
+		if !reflect.DeepEqual(resp.MultiValueHeaders["Foo"], []string{"foo"}) {
+			t.Errorf("unexpected header: want %#v, got %#v", []string{"foo"}, resp.MultiValueHeaders["Foo"])
+		}
+		if !reflect.DeepEqual(resp.MultiValueHeaders["Bar"], []string{"bar1", "bar2"}) {
+			t.Errorf("unexpected header: want %#v, got %#v", []string{"bar1", "bar2"}, resp.MultiValueHeaders["Bar"])
+		}
+
+		// Content-Type is auto detected.
+		if resp.Headers["Content-Type"] != "text/html; charset=utf-8" {
+			t.Errorf("unexpected header: want %q, got %q", "text/html; charset=utf-8", resp.Headers["Content-Type"])
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("unexpected status code: want %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if resp.Body != "<!DOCTYPE html>\n<html><body>Hello!</body></html>" {
+			t.Errorf("unexpected body: want %q, got %q", "<!DOCTYPE html>\n<html><body>Hello!</body></html>", resp.Body)
+		}
+		if resp.IsBase64Encoded {
+			t.Error("unexpected IsBase64Encoded: want false, got true")
+		}
+	})
+}
+
 func Benchmark(b *testing.B) {
 	req, err := loadRequest("testdata/apigateway-base64-request.json")
 	if err != nil {
