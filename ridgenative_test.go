@@ -331,9 +331,24 @@ func BenchmarkRequest(b *testing.B) {
 	}
 }
 
-func BenchmarkResponse(b *testing.B) {
+func BenchmarkResponse_binary(b *testing.B) {
 	l := &lambdaFunction{}
 	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		rw := l.newResponseWriter()
+		rw.Write(data)
+		rw.lambdaResponse()
+	}
+}
+
+func BenchmarkResponse_text(b *testing.B) {
+	l := &lambdaFunction{}
+	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
+	for i := 0; i < len(data); i++ {
+		data[i] = 'a'
+	}
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		rw := l.newResponseWriter()
 		rw.Write(data)
