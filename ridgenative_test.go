@@ -283,6 +283,39 @@ func TestResponse(t *testing.T) {
 			t.Error("unexpected IsBase64Encoded: want false, got true")
 		}
 	})
+	t.Run("base64", func(t *testing.T) {
+		rw := newResponseWriter()
+		// 1x1 PNG image
+		if _, err := io.WriteString(rw, "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52"); err != nil {
+			t.Error(err)
+		}
+		if _, err := io.WriteString(rw, "\x00\x00\x00\x01\x00\x00\x00\x01\x08\x04\x00\x00\x00\xb5\x1c\x0c"); err != nil {
+			t.Error(err)
+		}
+		if _, err := io.WriteString(rw, "\x02\x00\x00\x00\x0b\x49\x44\x41\x54\x08\xd7\x63\x60\x60\x00\x00"); err != nil {
+			t.Error(err)
+		}
+		if _, err := io.WriteString(rw, "\x00\x03\x00\x01\x20\xd5\x94\xc7\x00\x00\x00\x00\x49\x45\x4e\x44"); err != nil {
+			t.Error(err)
+		}
+		if _, err := io.WriteString(rw, "\xae\x42\x60\x82"); err != nil {
+			t.Error(err)
+		}
+
+		resp, err := rw.lambdaResponse()
+		if err != nil {
+			t.Error(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("unexpected status code: want %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if resp.Body != "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVQI12NgYAAAAAMAASDVlMcAAAAASUVORK5CYII=" {
+			t.Errorf("unexpected body: want %q, got %q", "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVQI12NgYAAAAAMAASDVlMcAAAAASUVORK5CYII=", resp.Body)
+		}
+		if !resp.IsBase64Encoded {
+			t.Error("unexpected IsBase64Encoded: want true, got false")
+		}
+	})
 }
 
 func Benchmark(b *testing.B) {
