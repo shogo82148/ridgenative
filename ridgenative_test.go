@@ -210,8 +210,9 @@ func TestHTTPRequest(t *testing.T) {
 }
 
 func TestResponse(t *testing.T) {
+	l := &lambdaFunction{}
 	t.Run("normal", func(t *testing.T) {
-		rw := newResponseWriter()
+		rw := l.newResponseWriter()
 		rw.Header().Add("foo", "foo")
 		rw.Header().Add("bar", "bar1")
 		rw.Header().Add("bar", "bar2")
@@ -256,7 +257,7 @@ func TestResponse(t *testing.T) {
 		}
 	})
 	t.Run("redirect to example.com", func(t *testing.T) {
-		rw := newResponseWriter()
+		rw := l.newResponseWriter()
 		rw.Header().Add("location", "http://example.com/")
 		rw.WriteHeader(http.StatusFound)
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
@@ -284,7 +285,7 @@ func TestResponse(t *testing.T) {
 		}
 	})
 	t.Run("base64", func(t *testing.T) {
-		rw := newResponseWriter()
+		rw := l.newResponseWriter()
 		// 1x1 PNG image
 		if _, err := io.WriteString(rw, "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52"); err != nil {
 			t.Error(err)
@@ -331,12 +332,11 @@ func BenchmarkRequest(b *testing.B) {
 }
 
 func BenchmarkResponse(b *testing.B) {
-	data := []byte{0xde, 0xad, 0xbe, 0xef}
+	l := &lambdaFunction{}
+	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
 	for i := 0; i < b.N; i++ {
-		rw := newResponseWriter()
-		for j := 0; j < 1024*1024; j++ {
-			rw.Write(data)
-		}
+		rw := l.newResponseWriter()
+		rw.Write(data)
 		rw.lambdaResponse()
 	}
 }

@@ -1,15 +1,18 @@
 package ridgenative
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"io"
 	"io/ioutil"
+	"log"
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"path"
+	"runtime"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/aws/aws-lambda-go/events"
 	"github.com/aws/aws-lambda-go/lambda"
@@ -17,6 +20,7 @@ import (
 
 type lambdaFunction struct {
 	mux http.Handler
+	buf bytes.Buffer
 }
 
 type request struct {
@@ -131,9 +135,13 @@ func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 }
 
 type responseWriter struct {
-	strings.Builder
-	header     http.Header
-	statusCode int
+	w           io.WriteCloser
+	isBase64    bool
+	builder     strings.Builder
+	header      http.Header
+	statusCode  int
+	wroteHeader bool
+	lambda      *lambdaFunction
 }
 
 type response struct {
@@ -145,11 +153,32 @@ type response struct {
 	IsBase64Encoded   bool                `json:"isBase64Encoded"`
 }
 
-func newResponseWriter() *responseWriter {
+func (f *lambdaFunction) newResponseWriter() *responseWriter {
+	f.buf.Reset()
+	f.buf.Grow(512)
 	return &responseWriter{
-		header:     http.Header{},
-		statusCode: http.StatusOK,
+		header: make(http.Header, 1),
+		lambda: f,
 	}
+}
+
+// relevantCaller searches the call stack for the first function outside of net/http.
+// The purpose of this function is to provide more helpful error messages.
+func relevantCaller() runtime.Frame {
+	pc := make([]uintptr, 16)
+	n := runtime.Callers(1, pc)
+	frames := runtime.CallersFrames(pc[:n])
+	var frame runtime.Frame
+	for {
+		frame, more := frames.Next()
+		if !strings.HasPrefix(frame.Function, "net/http.") {
+			return frame
+		}
+		if !more {
+			break
+		}
+	}
+	return frame
 }
 
 func (rw *responseWriter) Header() http.Header {
@@ -157,21 +186,48 @@ func (rw *responseWriter) Header() http.Header {
 }
 
 func (rw *responseWriter) WriteHeader(code int) {
+	if rw.wroteHeader {
+		caller := relevantCaller()
+		log.Printf("ridgenative: superfluous response.WriteHeader call from %s (%s:%d)", caller.Function, path.Base(caller.File), caller.Line)
+		return
+	}
 	rw.statusCode = code
+	rw.wroteHeader = true
+
+	if typ := rw.header.Get("Content-Type"); typ != "" {
+		rw.initWriter(typ)
+	}
+}
+
+func (rw *responseWriter) Write(data []byte) (int, error) {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
+
+	// Content-Type is already decided.
+	if rw.w != nil {
+		if rw.isBase64 {
+			rw.builder.Grow(base64.StdEncoding.EncodedLen(len(data)))
+		}
+		return rw.w.Write(data)
+	}
+
+	// need to detect Content-Type
+	left := 512 - rw.lambda.buf.Len()
+	if len(data) < left {
+		return rw.lambda.buf.Write(data)
+	}
+	rw.lambda.buf.Write(data[:left])
+	rw.initWriter("")
+	rw.w.Write(data[left:])
+	return len(data), nil
 }
 
 func (rw *responseWriter) lambdaResponse() (response, error) {
-	body := rw.String()
-
-	// detect content type
-	if rw.header.Get("Content-Type") == "" {
-		l := len(body)
-		if l > 512 {
-			l = 512 // DetectContentType uses the first 512 bytes of data
-		}
-		contentType := http.DetectContentType([]byte(body[:l]))
-		rw.header.Set("Content-Type", contentType)
+	if rw.w == nil {
+		rw.initWriter("")
 	}
+	rw.w.Close()
 
 	// fall back to headers if multiValueHeaders is not available
 	h := make(map[string]string, len(rw.header))
@@ -179,27 +235,87 @@ func (rw *responseWriter) lambdaResponse() (response, error) {
 		h[key] = rw.header.Get(key)
 	}
 
-	var isBase64 bool
-	if !utf8.ValidString(body) {
-		isBase64 = true
-		body = base64.StdEncoding.EncodeToString([]byte(body))
-	}
-
 	return response{
 		StatusCode:        rw.statusCode,
 		Headers:           h,
 		MultiValueHeaders: map[string][]string(rw.header),
-		Body:              body,
-		IsBase64Encoded:   isBase64,
+		Body:              rw.builder.String(),
+		IsBase64Encoded:   rw.isBase64,
 	}, nil
 }
 
-func (f lambdaFunction) lambdaHandler(ctx context.Context, req request) (response, error) {
+// initWriter checks Content-Type and sets IsBase64Encoded true if it is needed.
+// and then, initialize a new writer whose type is decided by IsBase64Encoded.
+func (rw *responseWriter) initWriter(contentType string) {
+	if contentType == "" {
+		contentType = http.DetectContentType(rw.lambda.buf.Bytes())
+		rw.header.Set("Content-Type", contentType)
+	}
+	rw.isBase64 = isBinary(contentType)
+	if rw.isBase64 {
+		rw.w = base64.NewEncoder(base64.StdEncoding, &rw.builder)
+		rw.builder.Grow(base64.StdEncoding.EncodedLen(rw.lambda.buf.Len()))
+	} else {
+		rw.w = nopCloser{&rw.builder}
+	}
+	if rw.lambda.buf.Len() > 0 {
+		rw.lambda.buf.WriteTo(rw.w)
+		rw.lambda.buf.Reset()
+	}
+}
+
+type nopCloser struct {
+	io.Writer
+}
+
+func (w nopCloser) Close() error { return nil }
+
+// assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml as text
+func isBinary(contentType string) bool {
+	i := strings.Index(contentType, ";")
+	if i == -1 {
+		i = len(contentType)
+	}
+	mediaType := strings.TrimSpace(contentType[:i])
+	i = strings.Index(mediaType, "/")
+	if i == -1 {
+		i = len(mediaType)
+	}
+	mainType := mediaType[:i]
+
+	if strings.EqualFold(mainType, "text") {
+		return false
+	}
+	if strings.EqualFold(mediaType, "application/json") {
+		return false
+	}
+	if strings.EqualFold(mediaType, "application/javascript") {
+		return false
+	}
+	if strings.EqualFold(mediaType, "application/xml") {
+		return false
+	}
+
+	i = strings.LastIndex(mediaType, "+")
+	if i == -1 {
+		i = 0
+	}
+	suffix := mediaType[i:]
+	if strings.EqualFold(suffix, "+json") {
+		return false
+	}
+	if strings.EqualFold(suffix, "+xml") {
+		return false
+	}
+	return true
+}
+
+func (f *lambdaFunction) lambdaHandler(ctx context.Context, req request) (response, error) {
 	r, err := httpRequest(ctx, req)
 	if err != nil {
 		return response{}, err
 	}
-	rw := newResponseWriter()
+	rw := f.newResponseWriter()
 	f.mux.ServeHTTP(rw, r)
 	return rw.lambdaResponse()
 }
@@ -209,6 +325,6 @@ func Run(address string, mux http.Handler) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
-	f := lambdaFunction{mux: mux}
+	f := &lambdaFunction{mux: mux}
 	lambda.Start(f.lambdaHandler)
 }
