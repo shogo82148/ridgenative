@@ -318,7 +318,7 @@ func TestResponse(t *testing.T) {
 	})
 }
 
-func Benchmark(b *testing.B) {
+func BenchmarkRequest(b *testing.B) {
 	req, err := loadRequest("testdata/apigateway-base64-request.json")
 	if err != nil {
 		b.Fatal(err)
@@ -327,5 +327,16 @@ func Benchmark(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		r, _ := httpRequest(context.Background(), req)
 		io.CopyBuffer(ioutil.Discard, r.Body, buf)
+	}
+}
+
+func BenchmarkResponse(b *testing.B) {
+	data := []byte{0xde, 0xad, 0xbe, 0xef}
+	for i := 0; i < b.N; i++ {
+		rw := newResponseWriter()
+		for j := 0; j < 1024*1024; j++ {
+			rw.Write(data)
+		}
+		rw.lambdaResponse()
 	}
 }
