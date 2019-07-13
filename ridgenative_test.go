@@ -255,6 +255,34 @@ func TestResponse(t *testing.T) {
 			t.Error("unexpected IsBase64Encoded: want false, got true")
 		}
 	})
+	t.Run("redirect to example.com", func(t *testing.T) {
+		rw := newResponseWriter()
+		rw.Header().Add("location", "http://example.com/")
+		rw.WriteHeader(http.StatusFound)
+		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
+			t.Error(err)
+		}
+		if _, err := rw.Write([]byte("<html><body>Redirect to <a href=http://example.com/>example.com</a></body></html>")); err != nil {
+			t.Error(err)
+		}
+
+		resp, err := rw.lambdaResponse()
+		if err != nil {
+			t.Error(err)
+		}
+		if resp.Headers["Location"] != "http://example.com/" {
+			t.Errorf("unexpected header: want %q, got %q", "http://example.com/", resp.Headers["Foo"])
+		}
+		if resp.StatusCode != http.StatusFound {
+			t.Errorf("unexpected status code: want %d, got %d", http.StatusFound, resp.StatusCode)
+		}
+		if resp.Body != "<!DOCTYPE html>\n<html><body>Redirect to <a href=http://example.com/>example.com</a></body></html>" {
+			t.Errorf("unexpected body: want %q, got %q", "<!DOCTYPE html>\n<html><body>Redirect to <a href=http://example.com/>example.com</a></body></html>", resp.Body)
+		}
+		if resp.IsBase64Encoded {
+			t.Error("unexpected IsBase64Encoded: want false, got true")
+		}
+	})
 }
 
 func Benchmark(b *testing.B) {
