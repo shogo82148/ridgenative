@@ -1,7 +1,6 @@
 package ridgenative
 
 import (
-	"bytes"
 	"context"
 	"encoding/base64"
 	"io"
@@ -20,7 +19,7 @@ import (
 
 type lambdaFunction struct {
 	mux http.Handler
-	buf bytes.Buffer
+	buf [512]byte
 }
 
 type request struct {
@@ -135,9 +134,7 @@ func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 }
 
 type responseWriter struct {
-	w           io.WriteCloser
-	isBase64    bool
-	builder     strings.Builder
+	strings.Builder
 	header      http.Header
 	statusCode  int
 	wroteHeader bool
@@ -154,8 +151,6 @@ type response struct {
 }
 
 func (f *lambdaFunction) newResponseWriter() *responseWriter {
-	f.buf.Reset()
-	f.buf.Grow(512)
 	return &responseWriter{
 		header: make(http.Header, 1),
 		lambda: f,
@@ -193,41 +188,24 @@ func (rw *responseWriter) WriteHeader(code int) {
 	}
 	rw.statusCode = code
 	rw.wroteHeader = true
-
-	if typ := rw.header.Get("Content-Type"); typ != "" {
-		rw.initWriter(typ)
-	}
-}
-
-func (rw *responseWriter) Write(data []byte) (int, error) {
-	if !rw.wroteHeader {
-		rw.WriteHeader(http.StatusOK)
-	}
-
-	// Content-Type is already decided.
-	if rw.w != nil {
-		if rw.isBase64 {
-			rw.builder.Grow(base64.StdEncoding.EncodedLen(len(data)))
-		}
-		return rw.w.Write(data)
-	}
-
-	// need to detect Content-Type
-	left := 512 - rw.lambda.buf.Len()
-	if len(data) < left {
-		return rw.lambda.buf.Write(data)
-	}
-	rw.lambda.buf.Write(data[:left])
-	rw.initWriter("")
-	rw.w.Write(data[left:])
-	return len(data), nil
 }
 
 func (rw *responseWriter) lambdaResponse() (response, error) {
-	if rw.w == nil {
-		rw.initWriter("")
+	body := rw.Builder.String()
+	contentType := rw.header.Get("Content-Type")
+	if contentType == "" {
+		copy(rw.lambda.buf[:], body)
+		contentType = http.DetectContentType(rw.lambda.buf[:])
+		rw.header.Set("Content-Type", contentType)
 	}
-	rw.w.Close()
+	isBase64 := isBinary(contentType)
+	if isBase64 {
+		body = base64.StdEncoding.EncodeToString([]byte(body))
+	}
+
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
 
 	// fall back to headers if multiValueHeaders is not available
 	h := make(map[string]string, len(rw.header))
@@ -239,36 +217,10 @@ func (rw *responseWriter) lambdaResponse() (response, error) {
 		StatusCode:        rw.statusCode,
 		Headers:           h,
 		MultiValueHeaders: map[string][]string(rw.header),
-		Body:              rw.builder.String(),
-		IsBase64Encoded:   rw.isBase64,
+		Body:              body,
+		IsBase64Encoded:   isBase64,
 	}, nil
 }
-
-// initWriter checks Content-Type and sets IsBase64Encoded true if it is needed.
-// and then, initialize a new writer whose type is decided by IsBase64Encoded.
-func (rw *responseWriter) initWriter(contentType string) {
-	if contentType == "" {
-		contentType = http.DetectContentType(rw.lambda.buf.Bytes())
-		rw.header.Set("Content-Type", contentType)
-	}
-	rw.isBase64 = isBinary(contentType)
-	if rw.isBase64 {
-		rw.w = base64.NewEncoder(base64.StdEncoding, &rw.builder)
-		rw.builder.Grow(base64.StdEncoding.EncodedLen(rw.lambda.buf.Len()))
-	} else {
-		rw.w = nopCloser{&rw.builder}
-	}
-	if rw.lambda.buf.Len() > 0 {
-		rw.lambda.buf.WriteTo(rw.w)
-		rw.lambda.buf.Reset()
-	}
-}
-
-type nopCloser struct {
-	io.Writer
-}
-
-func (w nopCloser) Close() error { return nil }
 
 // assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml as text
 func isBinary(contentType string) bool {
