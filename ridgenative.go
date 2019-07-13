@@ -1,6 +1,7 @@
 package ridgenative
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"io"
@@ -19,7 +20,12 @@ import (
 
 type lambdaFunction struct {
 	mux http.Handler
-	buf [512]byte
+	// buffer for string data
+	builder strings.Builder
+
+	// buffer for binary data
+	buffer bytes.Buffer
+	out    []byte
 }
 
 type request struct {
@@ -134,10 +140,11 @@ func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 }
 
 type responseWriter struct {
-	strings.Builder
+	w           io.Writer
+	isBinary    bool
+	wroteHeader bool
 	header      http.Header
 	statusCode  int
-	wroteHeader bool
 	lambda      *lambdaFunction
 }
 
@@ -151,6 +158,8 @@ type response struct {
 }
 
 func (f *lambdaFunction) newResponseWriter() *responseWriter {
+	f.builder.Reset()
+	f.buffer.Reset()
 	return &responseWriter{
 		header: make(http.Header, 1),
 		lambda: f,
@@ -188,23 +197,54 @@ func (rw *responseWriter) WriteHeader(code int) {
 	}
 	rw.statusCode = code
 	rw.wroteHeader = true
+	if typ := rw.header.Get("Content-Type"); typ != "" {
+		rw.isBinary = isBinary(typ)
+		if rw.isBinary {
+			rw.w = &rw.lambda.buffer
+		} else {
+			rw.w = &rw.lambda.builder
+		}
+	}
+}
+
+func (rw *responseWriter) Write(data []byte) (int, error) {
+	if rw.w != nil {
+		return rw.w.Write(data)
+	}
+
+	f := rw.lambda
+	rest := 512 - f.buffer.Len()
+	if len(data) < rest {
+		return f.buffer.Write(data)
+	}
+	n1, _ := f.buffer.Write(data[:rest])
+	rw.detectContentType()
+	n2, _ := rw.w.Write(data[rest:])
+	return n1 + n2, nil
 }
 
 func (rw *responseWriter) lambdaResponse() (response, error) {
-	body := rw.Builder.String()
-	contentType := rw.header.Get("Content-Type")
-	if contentType == "" {
-		copy(rw.lambda.buf[:], body)
-		contentType = http.DetectContentType(rw.lambda.buf[:])
-		rw.header.Set("Content-Type", contentType)
-	}
-	isBase64 := isBinary(contentType)
-	if isBase64 {
-		body = base64.StdEncoding.EncodeToString([]byte(body))
-	}
-
 	if !rw.wroteHeader {
 		rw.WriteHeader(http.StatusOK)
+	}
+	if rw.w == nil {
+		rw.detectContentType()
+	}
+
+	var body string
+	if rw.isBinary {
+		out := rw.lambda.out
+		l := base64.StdEncoding.EncodedLen(rw.lambda.buffer.Len())
+		if cap(out) < l {
+			out = make([]byte, l)
+		} else {
+			out = out[:l]
+		}
+		base64.StdEncoding.Encode(out, rw.lambda.buffer.Bytes())
+		body = string(out)
+		rw.lambda.out = out
+	} else {
+		body = rw.lambda.builder.String()
 	}
 
 	// fall back to headers if multiValueHeaders is not available
@@ -218,8 +258,20 @@ func (rw *responseWriter) lambdaResponse() (response, error) {
 		Headers:           h,
 		MultiValueHeaders: map[string][]string(rw.header),
 		Body:              body,
-		IsBase64Encoded:   isBase64,
+		IsBase64Encoded:   rw.isBinary,
 	}, nil
+}
+
+func (rw *responseWriter) detectContentType() {
+	contentType := http.DetectContentType(rw.lambda.buffer.Bytes())
+	rw.header.Set("Content-Type", contentType)
+	rw.isBinary = isBinary(contentType)
+	if rw.isBinary {
+		rw.w = &rw.lambda.buffer
+	} else {
+		rw.w = &rw.lambda.builder
+		rw.lambda.buffer.WriteTo(rw.w)
+	}
 }
 
 // assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml as text
@@ -272,11 +324,17 @@ func (f *lambdaFunction) lambdaHandler(ctx context.Context, req request) (respon
 	return rw.lambdaResponse()
 }
 
+func newLambdaFunction(mux http.Handler) *lambdaFunction {
+	return &lambdaFunction{
+		mux: mux,
+	}
+}
+
 // Run runs http handler on Apex or net/http's server.
 func Run(address string, mux http.Handler) {
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
-	f := &lambdaFunction{mux: mux}
+	f := newLambdaFunction(mux)
 	lambda.Start(f.lambdaHandler)
 }
