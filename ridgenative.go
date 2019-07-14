@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"net/textproto"
 	"net/url"
+	"os"
 	"path"
 	"runtime"
 	"strings"
@@ -342,11 +343,28 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 	}
 }
 
-// Run runs http handler on Apex or net/http's server.
-func Run(address string, mux http.Handler) {
+// ListenAndServe starts HTTP server.
+//
+// If AWS_EXECUTION_ENV environment value is defined, it wait for new AWS Lambda events and handle it as HTTP requests.
+// The format of the events is compatible with Amazon API Gateway Lambda proxy integration and Application Load Balancers.
+// See AWS documents for details.
+//
+// https://docs.aws.amazon.com/apigateway/latest/developerguide/set-up-lambda-proxy-integrations.html
+//
+// https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html
+//
+// If AWS_EXECUTION_ENV environment value is NOT defined, it just calls http.ListenAndServe.
+//
+// The handler is typically nil, in which case the DefaultServeMux is used.
+func ListenAndServe(address string, mux http.Handler) error {
+	if os.Getenv("AWS_EXECUTION_ENV") == "" {
+		// fall back to normal HTTP server.
+		return http.ListenAndServe(address, mux)
+	}
 	if mux == nil {
 		mux = http.DefaultServeMux
 	}
 	f := newLambdaFunction(mux)
 	lambda.Start(f.lambdaHandler)
+	panic("do not reach")
 }
