@@ -28,12 +28,13 @@ func loadRequest(path string) (request, error) {
 }
 
 func TestHTTPRequest(t *testing.T) {
+	l := newLambdaFunction(nil)
 	t.Run("alb get request", func(t *testing.T) {
 		req, err := loadRequest("testdata/alb-get-request.json")
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequest(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -65,7 +66,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequest(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -94,7 +95,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequest(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -123,7 +124,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequest(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -155,7 +156,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequest(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -184,7 +185,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequest(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -321,6 +322,7 @@ func TestResponse(t *testing.T) {
 }
 
 func BenchmarkRequest_binary(b *testing.B) {
+	l := newLambdaFunction(nil)
 	req, err := loadRequest("testdata/apigateway-base64-request.json")
 	if err != nil {
 		b.Fatal(err)
@@ -330,12 +332,13 @@ func BenchmarkRequest_binary(b *testing.B) {
 	buf := make([]byte, 1024)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r, _ := httpRequest(context.Background(), req)
+		r, _ := l.httpRequest(context.Background(), req)
 		io.CopyBuffer(ioutil.Discard, r.Body, buf)
 	}
 }
 
 func BenchmarkRequest_text(b *testing.B) {
+	l := newLambdaFunction(nil)
 	req, err := loadRequest("testdata/apigateway-base64-request.json")
 	if err != nil {
 		b.Fatal(err)
@@ -349,13 +352,13 @@ func BenchmarkRequest_text(b *testing.B) {
 	buf := make([]byte, 1024)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r, _ := httpRequest(context.Background(), req)
+		r, _ := l.httpRequest(context.Background(), req)
 		io.CopyBuffer(ioutil.Discard, r.Body, buf)
 	}
 }
 
 func BenchmarkResponse_binary(b *testing.B) {
-	l := &lambdaFunction{}
+	l := newLambdaFunction(nil)
 	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -366,7 +369,7 @@ func BenchmarkResponse_binary(b *testing.B) {
 }
 
 func BenchmarkResponse_text(b *testing.B) {
-	l := &lambdaFunction{}
+	l := newLambdaFunction(nil)
 	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
 	for i := 0; i < len(data); i++ {
 		data[i] = 'a'

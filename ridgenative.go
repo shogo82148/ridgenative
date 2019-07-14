@@ -62,7 +62,7 @@ type requestContext struct {
 	APIID        string                           `json:"apiId"` // The API Gateway rest API Id
 }
 
-func httpRequest(ctx context.Context, r request) (*http.Request, error) {
+func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Request, error) {
 	// decode header
 	var headers http.Header
 	if len(r.MultiValueHeaders) > 0 {
@@ -107,15 +107,26 @@ func httpRequest(ctx context.Context, r request) (*http.Request, error) {
 	var contentLength int64
 	var body io.ReadCloser
 	if r.Body != "" {
-		contentLength = int64(len(r.Body))
-		reader := io.Reader(strings.NewReader(r.Body))
+		var reader io.Reader
 		if r.IsBase64Encoded {
-			// ignore padding
-			for contentLength > 0 && r.Body[contentLength-1] == '=' {
-				contentLength--
+			f.buffer.Reset()
+			f.buffer.WriteString(r.Body)
+			n := base64.StdEncoding.DecodedLen(len(r.Body))
+			out := f.out
+			if cap(out) < n {
+				out = make([]byte, n)
+			} else {
+				out = out[:n]
 			}
-			contentLength = contentLength * 3 / 4
-			reader = base64.NewDecoder(base64.StdEncoding, reader)
+			n, err := base64.StdEncoding.Decode(out, f.buffer.Bytes())
+			if err != nil {
+				return nil, err
+			}
+			contentLength = int64(n)
+			reader = bytes.NewReader(out[:n])
+		} else {
+			contentLength = int64(len(r.Body))
+			reader = io.Reader(strings.NewReader(r.Body))
 		}
 		body = ioutil.NopCloser(reader)
 	} else {
@@ -315,7 +326,7 @@ func isBinary(contentType string) bool {
 }
 
 func (f *lambdaFunction) lambdaHandler(ctx context.Context, req request) (response, error) {
-	r, err := httpRequest(ctx, req)
+	r, err := f.httpRequest(ctx, req)
 	if err != nil {
 		return response{}, err
 	}
