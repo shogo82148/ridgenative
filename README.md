@@ -1,3 +1,6 @@
+[![Build Status](https://travis-ci.com/shogo82148/ridgenative.svg?branch=master)](https://travis-ci.com/shogo82148/ridgenative)
+[![GoDoc](https://godoc.org/github.com/shogo82148/ridgenative?status.svg)](https://godoc.org/github.com/shogo82148/ridgenative)
+
 # ridgenative
 AWS Lambda HTTP Proxy integration event bridge to Go net/http.
 [fujiwara/ridge](https://github.com/fujiwara/ridge) is a prior work, but it depends on [Apex](http://apex.run/).
