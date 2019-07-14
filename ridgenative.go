@@ -220,6 +220,9 @@ func (rw *responseWriter) WriteHeader(code int) {
 }
 
 func (rw *responseWriter) Write(data []byte) (int, error) {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
 	if rw.w != nil {
 		return rw.w.Write(data)
 	}

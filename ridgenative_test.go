@@ -258,6 +258,36 @@ func TestResponse(t *testing.T) {
 			t.Error("unexpected IsBase64Encoded: want false, got true")
 		}
 	})
+	t.Run("set content-type", func(t *testing.T) {
+		rw := l.newResponseWriter()
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
+			t.Error(err)
+		}
+		if _, err := rw.Write([]byte("<html><body>Hello!</body></html>")); err != nil {
+			t.Error(err)
+		}
+
+		resp, err := rw.lambdaResponse()
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Content-Type is auto detected.
+		if resp.Headers["Content-Type"] != "text/plain; charset=utf-8" {
+			t.Errorf("unexpected header: want %q, got %q", "text/plain; charset=utf-8", resp.Headers["Content-Type"])
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("unexpected status code: want %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if resp.Body != "<!DOCTYPE html>\n<html><body>Hello!</body></html>" {
+			t.Errorf("unexpected body: want %q, got %q", "<!DOCTYPE html>\n<html><body>Hello!</body></html>", resp.Body)
+		}
+		if resp.IsBase64Encoded {
+			t.Error("unexpected IsBase64Encoded: want false, got true")
+		}
+	})
 	t.Run("redirect to example.com", func(t *testing.T) {
 		rw := l.newResponseWriter()
 		rw.Header().Add("location", "http://example.com/")
