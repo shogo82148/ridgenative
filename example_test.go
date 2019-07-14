@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"time"
 
 	"github.com/shogo82148/ridgenative"
 )
@@ -14,6 +15,7 @@ func ExampleListenAndServe() {
 		fmt.Fprintln(w, "Hello World")
 	})
 	go ridgenative.ListenAndServe(":8080", nil)
+	time.Sleep(time.Second) // wait for starting the server.
 
 	resp, err := http.Get("http://localhost:8080")
 	if err != nil {
