@@ -17,7 +17,7 @@ import (
 
 func main() {
 	http.HandleFunc("/", handleRoot)
-	ridgenative.Run(":8080", "/api", nil)
+	ridgenative.ListenAndServe(":8080", nil)
 }
 
 func handleRoot(w http.ResponseWriter, r *http.Request) {
