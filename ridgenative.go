@@ -119,6 +119,7 @@ func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Requ
 				out = out[:n]
 			}
 			n, err := base64.StdEncoding.Decode(out, f.buffer.Bytes())
+			f.out = out
 			if err != nil {
 				return nil, err
 			}
