@@ -2,6 +2,7 @@ package ridgenative
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
 	"io"
 	"io/ioutil"
@@ -319,12 +320,34 @@ func TestResponse(t *testing.T) {
 	})
 }
 
-func BenchmarkRequest(b *testing.B) {
+func BenchmarkRequest_binary(b *testing.B) {
 	req, err := loadRequest("testdata/apigateway-base64-request.json")
 	if err != nil {
 		b.Fatal(err)
 	}
+	req.Body = base64.StdEncoding.EncodeToString(make([]byte, 1<<20))
+	req.IsBase64Encoded = true
 	buf := make([]byte, 1024)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		r, _ := httpRequest(context.Background(), req)
+		io.CopyBuffer(ioutil.Discard, r.Body, buf)
+	}
+}
+
+func BenchmarkRequest_text(b *testing.B) {
+	req, err := loadRequest("testdata/apigateway-base64-request.json")
+	if err != nil {
+		b.Fatal(err)
+	}
+	data := make([]byte, 1<<20)
+	for i := 0; i < len(data); i++ {
+		data[i] = 'a'
+	}
+	req.Body = string(data)
+	req.IsBase64Encoded = false
+	buf := make([]byte, 1024)
+	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		r, _ := httpRequest(context.Background(), req)
 		io.CopyBuffer(ioutil.Discard, r.Body, buf)
