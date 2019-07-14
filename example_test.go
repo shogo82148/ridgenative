@@ -10,14 +10,14 @@ import (
 )
 
 func ExampleListenAndServe() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	http.HandleFunc("/hello", func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "text/plain")
 		fmt.Fprintln(w, "Hello World")
 	})
 	go ridgenative.ListenAndServe(":8080", nil)
 	time.Sleep(time.Second) // wait for starting the server.
 
-	resp, err := http.Get("http://localhost:8080")
+	resp, err := http.Get("http://localhost:8080/hello")
 	if err != nil {
 		panic(err)
 	}

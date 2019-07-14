@@ -1,0 +1,17 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: example of shogo82148/ridgenative
+Resources:
+  ExampleApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: example
+      Runtime: go1.x
+      Timeout: 30
+      CodeUri: dist
+      Events:
+        Proxy:
+          Type: Api
+          Properties:
+            Path: /{proxy+}
+            Method: any
