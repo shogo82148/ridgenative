@@ -163,7 +163,6 @@ type responseWriter struct {
 
 type response struct {
 	StatusCode        int                 `json:"statusCode"`
-	StatusDescription string              `json:"statusDescription"`
 	Headers           map[string]string   `json:"headers"`
 	MultiValueHeaders map[string][]string `json:"multiValueHeaders"`
 	Body              string              `json:"body"`
