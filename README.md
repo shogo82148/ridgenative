@@ -1,4 +1,4 @@
-[![Build Status](https://travis-ci.com/shogo82148/ridgenative.svg?branch=master)](https://travis-ci.com/shogo82148/ridgenative)
+[![Build Status](https://github.com/shogo82148/ridgenative/workflows/Test/badge.svg)](https://github.com/shogo82148/ridgenative/actions)
 [![GoDoc](https://godoc.org/github.com/shogo82148/ridgenative?status.svg)](https://godoc.org/github.com/shogo82148/ridgenative)
 
 # ridgenative
