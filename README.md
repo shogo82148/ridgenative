@@ -108,7 +108,7 @@ Resources:
     Properties:
       Action: lambda:InvokeFunction
       FunctionName: !Ref Function
-	  Principal: elasticloadbalancing.amazonaws.com
+      Principal: elasticloadbalancing.amazonaws.com
 
   LambdaTargetGroup:
     Type: AWS::ElasticLoadBalancingV2::TargetGroup
