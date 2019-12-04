@@ -9,7 +9,7 @@ jobs:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v1
       - name: golangci-lint
-        uses: shogo82148/action-golangci-lint@6b1abcb8d1e175d9bbd84485680c7ee6e34f0517
+        uses: shogo82148/action-golangci-lint@d9f6c3a4f68bced7466cd07b5d3aad6be6b8486e
         with:
           github_token: ${{ secrets.github_token }}
           level: warning
