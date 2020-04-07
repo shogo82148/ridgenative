@@ -229,7 +229,7 @@ func (f *lambdaFunction) httpRequestAPIGatewayV2(ctx context.Context, r request)
 		ProtoMajor:    1,
 		ProtoMinor:    0,
 		Header:        headers,
-		RemoteAddr:    r.RequestContext.Identity.SourceIP,
+		RemoteAddr:    r.RequestContext.HTTP.SourceIP,
 		ContentLength: contentLength,
 		Body:          body,
 		RequestURI:    rawURI,
