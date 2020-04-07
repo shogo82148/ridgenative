@@ -45,6 +45,11 @@ type request struct {
 	Resource       string            `json:"resource"`
 	PathParameters map[string]string `json:"pathParameters"`
 	StageVariables map[string]string `json:"stageVariables"`
+
+	// for API Gateway v2 events
+	Version        string `json:"version"`
+	RawPath        string `json:"rawPath"`
+	RawQueryString string `json:"rawQueryString"`
 }
 
 type requestContext struct {
@@ -61,9 +66,26 @@ type requestContext struct {
 	Authorizer   map[string]interface{}           `json:"authorizer"`
 	HTTPMethod   string                           `json:"httpMethod"`
 	APIID        string                           `json:"apiId"` // The API Gateway rest API Id
+
+	// for API Gateway v2 events
+	HTTP *requestContextHTTP `json:"http"`
+}
+
+type requestContextHTTP struct {
+	Method    string `json:"method"`
+	Path      string `json:"path"`
+	Protocol  string `json:"protocol"`
+	SourceIP  string `json:"sourceIp"`
+	UserAgent string `json:"userAgent"`
 }
 
 func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Request, error) {
+	if r.RequestContext.HTTP != nil {
+		// API Gateway v2
+		return f.httpRequestAPIGatewayV2(ctx, r)
+	}
+	// API Gateway v1 or ALB
+
 	// decode header
 	var headers http.Header
 	if len(r.MultiValueHeaders) > 0 {
@@ -145,6 +167,72 @@ func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Requ
 		ContentLength: contentLength,
 		Body:          body,
 		RequestURI:    uri,
+		URL:           u,
+		Host:          headers.Get("Host"),
+	}
+	req = req.WithContext(ctx)
+	return req, nil
+}
+
+func (f *lambdaFunction) httpRequestAPIGatewayV2(ctx context.Context, r request) (*http.Request, error) {
+	headers := make(http.Header, len(r.Headers))
+	for k, v := range r.Headers {
+		headers[textproto.CanonicalMIMEHeaderKey(k)] = []string{v}
+	}
+
+	// build uri
+	uri := r.RequestContext.HTTP.Path
+	rawURI := r.RawPath
+	if r.RawQueryString != "" {
+		uri = uri + "?" + r.RawQueryString
+		rawURI = rawURI + "?" + r.RawQueryString
+	}
+	u, err := url.Parse(uri)
+	if err != nil {
+		return nil, err
+	}
+
+	// build body
+	var contentLength int64
+	var body io.ReadCloser
+	if r.Body != "" {
+		var reader io.Reader
+		if r.IsBase64Encoded {
+			f.buffer.Reset()
+			f.buffer.WriteString(r.Body)
+			n := base64.StdEncoding.DecodedLen(len(r.Body))
+			out := f.out
+			if cap(out) < n {
+				out = make([]byte, n)
+			} else {
+				out = out[:n]
+			}
+			n, err := base64.StdEncoding.Decode(out, f.buffer.Bytes())
+			f.out = out
+			if err != nil {
+				return nil, err
+			}
+			contentLength = int64(n)
+			reader = bytes.NewReader(out[:n])
+		} else {
+			contentLength = int64(len(r.Body))
+			reader = io.Reader(strings.NewReader(r.Body))
+		}
+		body = ioutil.NopCloser(reader)
+	} else {
+		body = http.NoBody
+	}
+
+	req := &http.Request{
+		Method:        r.RequestContext.HTTP.Method,
+		Proto:         "HTTP/1.0",
+		ProtoMajor:    1,
+		ProtoMinor:    0,
+		Header:        headers,
+		RemoteAddr:    r.RequestContext.Identity.SourceIP,
+		ContentLength: contentLength,
+		Body:          body,
+		RequestURI:    rawURI,
 		URL:           u,
 		Host:          headers.Get("Host"),
 	}
