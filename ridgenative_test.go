@@ -209,6 +209,96 @@ func TestHTTPRequest(t *testing.T) {
 			t.Errorf("unexpected host: want %q, got %q", "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com", httpReq.Host)
 		}
 	})
+	t.Run("api gateway v2 request", func(t *testing.T) {
+		req, err := loadRequest("testdata/apigateway-v2-get-request.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpReq, err := l.httpRequest(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if httpReq.Method != http.MethodGet {
+			t.Errorf("unexpected method: want %s, got %s", http.MethodGet, httpReq.Method)
+		}
+		if !reflect.DeepEqual(httpReq.Header["Header1"], []string{"value1,value2"}) {
+			t.Errorf("unexpected header: want %v, got %v", []string{"value1,value2"}, httpReq.Header["Header1"])
+		}
+		if httpReq.RequestURI != "/my/path?parameter1=value1&parameter1=value2&parameter2=value" {
+			t.Errorf("unexpected RequestURI: want %q, got %q", "/my/path?parameter1=value1&parameter1=value2&parameter2=value", httpReq.RequestURI)
+		}
+		if httpReq.ContentLength != 0 {
+			t.Errorf("unexpected ContentLength: want %d, got %d", 0, httpReq.ContentLength)
+		}
+		body, err := ioutil.ReadAll(httpReq.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "" {
+			t.Errorf("unexpected body: want %q, got %q", "", string(body))
+		}
+		if httpReq.Host != "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com" {
+			t.Errorf("unexpected host: want %q, got %q", "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com", httpReq.Host)
+		}
+	})
+	t.Run("api gateway v2 post request", func(t *testing.T) {
+		req, err := loadRequest("testdata/apigateway-v2-post-request.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpReq, err := l.httpRequest(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if httpReq.Method != http.MethodPost {
+			t.Errorf("unexpected method: want %s, got %s", http.MethodPost, httpReq.Method)
+		}
+		if httpReq.RequestURI != "/my/path" {
+			t.Errorf("unexpected RequestURI: want %q, got %q", "/my/path", httpReq.RequestURI)
+		}
+		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
+			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
+		}
+		body, err := ioutil.ReadAll(httpReq.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "{\"hello\":\"world\"}" {
+			t.Errorf("unexpected body: want %q, got %q", "{\"hello\":\"world\"}", string(body))
+		}
+		if httpReq.Host != "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com" {
+			t.Errorf("unexpected host: want %q, got %q", "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com", httpReq.Host)
+		}
+	})
+	t.Run("api gateway v2 base64 request", func(t *testing.T) {
+		req, err := loadRequest("testdata/apigateway-v2-base64-request.json")
+		if err != nil {
+			t.Fatal(err)
+		}
+		httpReq, err := l.httpRequest(context.Background(), req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if httpReq.Method != http.MethodPost {
+			t.Errorf("unexpected method: want %s, got %s", http.MethodPost, httpReq.Method)
+		}
+		if httpReq.RequestURI != "/my/path" {
+			t.Errorf("unexpected RequestURI: want %q, got %q", "/my/path", httpReq.RequestURI)
+		}
+		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
+			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
+		}
+		body, err := ioutil.ReadAll(httpReq.Body)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(body) != "{\"hello\":\"world\"}" {
+			t.Errorf("unexpected body: want %q, got %q", "{\"hello\":\"world\"}", string(body))
+		}
+		if httpReq.Host != "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com" {
+			t.Errorf("unexpected host: want %q, got %q", "xxxxxxxxxx.execute-api.ap-northeast-1.amazonaws.com", httpReq.Host)
+		}
+	})
 }
 
 func TestResponse(t *testing.T) {
