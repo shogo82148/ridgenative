@@ -447,7 +447,9 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 //
 // The handler is typically nil, in which case the DefaultServeMux is used.
 func ListenAndServe(address string, mux http.Handler) error {
-	if os.Getenv("AWS_EXECUTION_ENV") == "" {
+	go1 := os.Getenv("AWS_EXECUTION_ENV")      // run on go1.x runtime
+	al2 := os.Getenv("AWS_LAMBDA_RUNTIME_API") // run on provided or provided.al2 runtime
+	if go1 == "" && al2 == "" {
 		// fall back to normal HTTP server.
 		return http.ListenAndServe(address, mux)
 	}
