@@ -29,6 +29,8 @@ func handleRoot(w http.ResponseWriter, r *http.Request) {
 }
 ```
 
+### Run Locally
+
 You can run it locally.
 
 ```
@@ -40,9 +42,11 @@ $ curl http://localhost:8080/hello
 Hello World
 ```
 
-And more, you can run it on AWS with API gateway proxy integration.
+### Amazon API Gateway REST API with HTTP proxy integration
+
+You can run it as an [Amazon API Gateway REST API](https://docs.aws.amazon.com/apigateway/latest/developerguide/apigateway-rest-api.html) without any modification of the source code.
 Here is an example of [AWS Serverless Application Model template](https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md) template.
-See [the example directory](https://github.com/shogo82148/ridgenative/tree/master/example) to how to deploy it.
+See [the example directory](https://github.com/shogo82148/ridgenative/tree/main/example) to how to deploy it.
 
 ```yaml
 AWSTemplateFormatVersion: '2010-09-09'
@@ -64,7 +68,30 @@ Resources:
             Method: any
 ```
 
-More and more, you can run it on AWS with Application Load Balancer.
+### Amazon API Gateway HTTP API
+
+You can also run it as an [Amazon API Gateway HTTP API](https://docs.aws.amazon.com/apigateway/latest/developerguide/http-api.html).
+
+```yaml
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: 'AWS::Serverless-2016-10-31'
+Description: example of shogo82148/ridgenative
+Resources:
+  ExampleApi:
+    Type: AWS::Serverless::Function
+    Properties:
+      Handler: example
+      Runtime: go1.x
+      Timeout: 30
+      CodeUri: dist
+      Events:
+        ApiEvent:
+          Type: HttpApi
+```
+
+### Targets of Application Load Balancer
+
+More and more, you can run it as [a target of Application Load Balancer](https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html).
 
 ```yaml
 AWSTemplateFormatVersion: "2010-09-09"
