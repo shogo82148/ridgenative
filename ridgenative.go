@@ -80,7 +80,7 @@ type requestContextHTTP struct {
 }
 
 func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Request, error) {
-	if r.RequestContext.HTTP != nil {
+	if strings.HasPrefix(r.Version, "2.") {
 		// API Gateway v2
 		return f.httpRequestAPIGatewayV2(ctx, r)
 	}
