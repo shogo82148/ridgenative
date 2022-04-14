@@ -43,6 +43,7 @@ jobs:
   # notifies that all test jobs are finished.
   finish:
     needs: test
+    if: always()
     runs-on: ubuntu-latest
     steps:
       - uses: shogo82148/actions-goveralls@v1
