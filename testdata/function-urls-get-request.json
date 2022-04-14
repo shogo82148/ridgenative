@@ -15,7 +15,7 @@
         "parameter1": "value1,value2",
         "parameter2": "value"
     },
-    "rawPath": "/my/path",
+    "rawPath": "/foo /bar",
     "rawQueryString": "parameter1=value1&parameter1=value2&parameter2=value",
     "requestContext": {
         "accountId": "anonymous",
@@ -24,7 +24,7 @@
         "domainPrefix": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
         "http": {
             "method": "GET",
-            "path": "/my/path",
+            "path": "/foo /bar",
             "protocol": "HTTP/1.1",
             "sourceIp": "192.0.2.1",
             "userAgent": "curl/7.79.1"
