@@ -57,7 +57,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: example
-      Runtime: go1.x
+      Runtime: provided.al2
       Timeout: 30
       CodeUri: dist
       Events:
@@ -81,7 +81,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: example
-      Runtime: go1.x
+      Runtime: provided.al2
       Timeout: 30
       CodeUri: dist
       Events:
@@ -99,12 +99,11 @@ AWSTemplateFormatVersion: "2010-09-09"
 Resources:
   Function:
     Type: AWS::Lambda::Function
-    DependsOn: ExecutionRole
     Properties:
       Code: dist
       Handler: example
       Role: !GetAtt ExecutionRole.Arn
-      Runtime: go1.x
+      Runtime: provided.al2
       Timeout: 30
 
   ExecutionRole:
@@ -146,6 +145,53 @@ Resources:
 
 # Configure listener rules of ALB to forward to the LambdaTargetGroup.
 # ...
+```
+
+### Lambda function URLs
+
+More and more, you can run it as [Lambda function URLs](https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html).
+
+```yaml
+AWSTemplateFormatVersion: "2010-09-09"
+
+Resources:
+  Function:
+    Type: AWS::Lambda::Function
+    Properties:
+      Code: dist
+      Handler: example
+      Role: !GetAtt ExecutionRole.Arn
+      Runtime: provided.al2
+      Timeout: 30
+
+  LambdaUrls:
+    Type: AWS::Lambda::Url
+    Properties:
+      AuthType: NONE
+      TargetFunctionArn: !GetAtt Function.Arn
+
+  ExecutionRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Statement:
+        - Effect: Allow
+          Principal:
+            Service:
+            - lambda.amazonaws.com
+          Action:
+          - sts:AssumeRole
+      Path: "/"
+      Policies:
+      - PolicyName: CloudWatchLogs
+        PolicyDocument:
+          Statement:
+          - Effect: Allow
+            Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+            Resource: "*"
 ```
 
 ## RELATED WORKS
