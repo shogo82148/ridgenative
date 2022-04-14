@@ -1,5 +1,5 @@
 module github.com/shogo82148/ridgenative
 
-go 1.17
+go 1.16
 
-require github.com/aws/aws-lambda-go v1.29.0
+require github.com/aws/aws-lambda-go v1.30.0
