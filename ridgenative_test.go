@@ -11,19 +11,19 @@ import (
 	"testing"
 )
 
-func loadRequest(path string) (request, error) {
+func loadRequest(path string) (*request, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return request{}, err
+		return &request{}, err
 	}
 	defer f.Close()
 
 	var req request
 	dec := json.NewDecoder(f)
 	if err := dec.Decode(&req); err != nil {
-		return request{}, err
+		return &request{}, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func TestHTTPRequest(t *testing.T) {

@@ -79,11 +79,11 @@ type requestContextHTTP struct {
 	UserAgent string `json:"userAgent"`
 }
 
-func isV2Request(r request) bool {
+func isV2Request(r *request) bool {
 	return r.Version == "2" || strings.HasPrefix(r.Version, "2.")
 }
 
-func (f *lambdaFunction) httpRequestV1(ctx context.Context, r request) (*http.Request, error) {
+func (f *lambdaFunction) httpRequestV1(ctx context.Context, r *request) (*http.Request, error) {
 	// decode header
 	var headers http.Header
 	if len(r.MultiValueHeaders) > 0 {
@@ -147,7 +147,7 @@ func (f *lambdaFunction) httpRequestV1(ctx context.Context, r request) (*http.Re
 	return req, nil
 }
 
-func (f *lambdaFunction) httpRequestV2(ctx context.Context, r request) (*http.Request, error) {
+func (f *lambdaFunction) httpRequestV2(ctx context.Context, r *request) (*http.Request, error) {
 	// build headers
 	headers := make(http.Header, len(r.Headers))
 	for k, v := range r.Headers {
@@ -194,7 +194,7 @@ func (f *lambdaFunction) httpRequestV2(ctx context.Context, r request) (*http.Re
 	return req, nil
 }
 
-func (f *lambdaFunction) decodeBody(r request) (body io.ReadCloser, contentLength int64, err error) {
+func (f *lambdaFunction) decodeBody(r *request) (body io.ReadCloser, contentLength int64, err error) {
 	if r.Body != "" {
 		var reader io.Reader
 		if r.IsBase64Encoded {
@@ -312,7 +312,7 @@ func (rw *responseWriter) Write(data []byte) (int, error) {
 	return n1 + n2, nil
 }
 
-func (rw *responseWriter) lambdaResponseV1() (response, error) {
+func (rw *responseWriter) lambdaResponseV1() (*response, error) {
 	body := rw.encodeBody()
 
 	// fall back to headers if multiValueHeaders is not available
@@ -329,7 +329,7 @@ func (rw *responseWriter) lambdaResponseV1() (response, error) {
 		h[key] = strings.Join(value, ", ")
 	}
 
-	return response{
+	return &response{
 		StatusCode:        rw.statusCode,
 		Headers:           h,
 		MultiValueHeaders: map[string][]string(rw.header),
@@ -338,7 +338,7 @@ func (rw *responseWriter) lambdaResponseV1() (response, error) {
 	}, nil
 }
 
-func (rw *responseWriter) lambdaResponseV2() (response, error) {
+func (rw *responseWriter) lambdaResponseV2() (*response, error) {
 	body := rw.encodeBody()
 
 	// multiValueHeaders is not available in V2; fall back to headers
@@ -352,7 +352,7 @@ func (rw *responseWriter) lambdaResponseV2() (response, error) {
 
 	cookies := rw.header.Values("Set-Cookie")
 
-	return response{
+	return &response{
 		StatusCode:      rw.statusCode,
 		Headers:         h,
 		Cookies:         cookies,
@@ -439,12 +439,12 @@ func isBinary(contentType string) bool {
 	return true
 }
 
-func (f *lambdaFunction) lambdaHandler(ctx context.Context, req request) (response, error) {
+func (f *lambdaFunction) lambdaHandler(ctx context.Context, req *request) (*response, error) {
 	if isV2Request(req) {
 		// Lambda Function URLs or API Gateway v2
 		r, err := f.httpRequestV2(ctx, req)
 		if err != nil {
-			return response{}, err
+			return &response{}, err
 		}
 		rw := f.newResponseWriter()
 		f.mux.ServeHTTP(rw, r)
@@ -453,7 +453,7 @@ func (f *lambdaFunction) lambdaHandler(ctx context.Context, req request) (respon
 		// API Gateway v1 or ALB
 		r, err := f.httpRequestV1(ctx, req)
 		if err != nil {
-			return response{}, err
+			return &response{}, err
 		}
 		rw := f.newResponseWriter()
 		f.mux.ServeHTTP(rw, r)
