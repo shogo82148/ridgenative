@@ -33,7 +33,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +66,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -126,7 +126,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -159,7 +159,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -189,7 +189,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -219,7 +219,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -252,7 +252,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -282,7 +282,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -312,7 +312,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -345,7 +345,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -375,7 +375,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -416,15 +416,15 @@ func TestResponse(t *testing.T) {
 			t.Error(err)
 		}
 
-		resp, err := rw.lambdaResponse()
+		resp, err := rw.lambdaResponseV1()
 		if err != nil {
 			t.Error(err)
 		}
 		if resp.Headers["Foo"] != "foo" {
 			t.Errorf("unexpected header: want %q, got %q", "foo", resp.Headers["Foo"])
 		}
-		if resp.Headers["Bar"] != "bar1" {
-			t.Errorf("unexpected header: want %q, got %q", "foo", resp.Headers["Foo"])
+		if resp.Headers["Bar"] != "bar1, bar2" {
+			t.Errorf("unexpected header: want %q, got %q", "bar1, bar2", resp.Headers["Bar"])
 		}
 		if !reflect.DeepEqual(resp.MultiValueHeaders["Foo"], []string{"foo"}) {
 			t.Errorf("unexpected header: want %#v, got %#v", []string{"foo"}, resp.MultiValueHeaders["Foo"])
@@ -458,7 +458,7 @@ func TestResponse(t *testing.T) {
 			t.Error(err)
 		}
 
-		resp, err := rw.lambdaResponse()
+		resp, err := rw.lambdaResponseV1()
 		if err != nil {
 			t.Error(err)
 		}
@@ -489,7 +489,7 @@ func TestResponse(t *testing.T) {
 			t.Error(err)
 		}
 
-		resp, err := rw.lambdaResponse()
+		resp, err := rw.lambdaResponseV1()
 		if err != nil {
 			t.Error(err)
 		}
@@ -525,7 +525,7 @@ func TestResponse(t *testing.T) {
 			t.Error(err)
 		}
 
-		resp, err := rw.lambdaResponse()
+		resp, err := rw.lambdaResponseV1()
 		if err != nil {
 			t.Error(err)
 		}
@@ -552,7 +552,7 @@ func BenchmarkRequest_binary(b *testing.B) {
 	buf := make([]byte, 1024)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r, _ := l.httpRequest(context.Background(), req)
+		r, _ := l.httpRequestV1(context.Background(), req)
 		io.CopyBuffer(io.Discard, r.Body, buf)
 	}
 }
@@ -572,7 +572,7 @@ func BenchmarkRequest_text(b *testing.B) {
 	buf := make([]byte, 1024)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r, _ := l.httpRequest(context.Background(), req)
+		r, _ := l.httpRequestV1(context.Background(), req)
 		io.CopyBuffer(io.Discard, r.Body, buf)
 	}
 }
@@ -584,7 +584,7 @@ func BenchmarkResponse_binary(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		rw := l.newResponseWriter()
 		rw.Write(data)
-		rw.lambdaResponse()
+		rw.lambdaResponseV1()
 	}
 }
 
@@ -598,6 +598,6 @@ func BenchmarkResponse_text(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		rw := l.newResponseWriter()
 		rw.Write(data)
-		rw.lambdaResponse()
+		rw.lambdaResponseV1()
 	}
 }
