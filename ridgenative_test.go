@@ -5,7 +5,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
-	"io/ioutil"
 	"net/http"
 	"os"
 	"reflect"
@@ -50,7 +49,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != 0 {
 			t.Errorf("unexpected ContentLength: want %d, got %d", 0, httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,7 +79,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -110,7 +109,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -143,7 +142,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != 0 {
 			t.Errorf("unexpected ContentLength: want %d, got %d", 0, httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -173,7 +172,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -203,7 +202,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -236,7 +235,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != 0 {
 			t.Errorf("unexpected ContentLength: want %d, got %d", 0, httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -266,7 +265,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -296,7 +295,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -329,7 +328,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != 0 {
 			t.Errorf("unexpected ContentLength: want %d, got %d", 0, httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -359,7 +358,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -389,7 +388,7 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		body, err := ioutil.ReadAll(httpReq.Body)
+		body, err := io.ReadAll(httpReq.Body)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -554,7 +553,7 @@ func BenchmarkRequest_binary(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		r, _ := l.httpRequest(context.Background(), req)
-		io.CopyBuffer(ioutil.Discard, r.Body, buf)
+		io.CopyBuffer(io.Discard, r.Body, buf)
 	}
 }
 
@@ -574,7 +573,7 @@ func BenchmarkRequest_text(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		r, _ := l.httpRequest(context.Background(), req)
-		io.CopyBuffer(ioutil.Discard, r.Body, buf)
+		io.CopyBuffer(io.Discard, r.Body, buf)
 	}
 }
 

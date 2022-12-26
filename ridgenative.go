@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/base64"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"net/textproto"
@@ -152,7 +151,7 @@ func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Requ
 			contentLength = int64(len(r.Body))
 			reader = io.Reader(strings.NewReader(r.Body))
 		}
-		body = ioutil.NopCloser(reader)
+		body = io.NopCloser(reader)
 	} else {
 		body = http.NoBody
 	}
@@ -218,7 +217,7 @@ func (f *lambdaFunction) httpRequestAPIGatewayV2(ctx context.Context, r request)
 			contentLength = int64(len(r.Body))
 			reader = io.Reader(strings.NewReader(r.Body))
 		}
-		body = ioutil.NopCloser(reader)
+		body = io.NopCloser(reader)
 	} else {
 		body = http.NoBody
 	}
