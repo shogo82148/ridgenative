@@ -448,7 +448,7 @@ func (f *lambdaFunction) lambdaHandler(ctx context.Context, req request) (respon
 		}
 		rw := f.newResponseWriter()
 		f.mux.ServeHTTP(rw, r)
-		return rw.lambdaResponseV1()
+		return rw.lambdaResponseV2()
 	} else {
 		// API Gateway v1 or ALB
 		r, err := f.httpRequestV1(ctx, req)
