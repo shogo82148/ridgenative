@@ -46,9 +46,10 @@ type request struct {
 	StageVariables map[string]string `json:"stageVariables"`
 
 	// for API Gateway v2 events
-	Version        string `json:"version"`
-	RawPath        string `json:"rawPath"`
-	RawQueryString string `json:"rawQueryString"`
+	Version        string   `json:"version"`
+	RawPath        string   `json:"rawPath"`
+	RawQueryString string   `json:"rawQueryString"`
+	Cookies        []string `json:"cookies"`
 }
 
 type requestContext struct {
@@ -78,13 +79,11 @@ type requestContextHTTP struct {
 	UserAgent string `json:"userAgent"`
 }
 
-func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Request, error) {
-	if strings.HasPrefix(r.Version, "2.") {
-		// API Gateway v2
-		return f.httpRequestAPIGatewayV2(ctx, r)
-	}
-	// API Gateway v1 or ALB
+func isV2Request(r *request) bool {
+	return r.Version == "2" || strings.HasPrefix(r.Version, "2.")
+}
 
+func (f *lambdaFunction) httpRequestV1(ctx context.Context, r *request) (*http.Request, error) {
 	// decode header
 	var headers http.Header
 	if len(r.MultiValueHeaders) > 0 {
@@ -126,34 +125,9 @@ func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Requ
 	}
 
 	// build body
-	var contentLength int64
-	var body io.ReadCloser
-	if r.Body != "" {
-		var reader io.Reader
-		if r.IsBase64Encoded {
-			f.buffer.Reset()
-			f.buffer.WriteString(r.Body)
-			n := base64.StdEncoding.DecodedLen(len(r.Body))
-			out := f.out
-			if cap(out) < n {
-				out = make([]byte, n)
-			} else {
-				out = out[:n]
-			}
-			n, err := base64.StdEncoding.Decode(out, f.buffer.Bytes())
-			f.out = out
-			if err != nil {
-				return nil, err
-			}
-			contentLength = int64(n)
-			reader = bytes.NewReader(out[:n])
-		} else {
-			contentLength = int64(len(r.Body))
-			reader = io.Reader(strings.NewReader(r.Body))
-		}
-		body = io.NopCloser(reader)
-	} else {
-		body = http.NoBody
+	body, contentLength, err := f.decodeBody(r)
+	if err != nil {
+		return nil, err
 	}
 
 	req := &http.Request{
@@ -173,10 +147,16 @@ func (f *lambdaFunction) httpRequest(ctx context.Context, r request) (*http.Requ
 	return req, nil
 }
 
-func (f *lambdaFunction) httpRequestAPIGatewayV2(ctx context.Context, r request) (*http.Request, error) {
+func (f *lambdaFunction) httpRequestV2(ctx context.Context, r *request) (*http.Request, error) {
+	// build headers
 	headers := make(http.Header, len(r.Headers))
 	for k, v := range r.Headers {
-		headers[textproto.CanonicalMIMEHeaderKey(k)] = []string{v}
+		headers.Set(k, v)
+	}
+
+	// build cookies
+	if len(r.Cookies) > 0 {
+		headers.Set("Cookie", strings.Join(r.Cookies, ";"))
 	}
 
 	// build uri
@@ -192,34 +172,9 @@ func (f *lambdaFunction) httpRequestAPIGatewayV2(ctx context.Context, r request)
 	}
 
 	// build body
-	var contentLength int64
-	var body io.ReadCloser
-	if r.Body != "" {
-		var reader io.Reader
-		if r.IsBase64Encoded {
-			f.buffer.Reset()
-			f.buffer.WriteString(r.Body)
-			n := base64.StdEncoding.DecodedLen(len(r.Body))
-			out := f.out
-			if cap(out) < n {
-				out = make([]byte, n)
-			} else {
-				out = out[:n]
-			}
-			n, err := base64.StdEncoding.Decode(out, f.buffer.Bytes())
-			f.out = out
-			if err != nil {
-				return nil, err
-			}
-			contentLength = int64(n)
-			reader = bytes.NewReader(out[:n])
-		} else {
-			contentLength = int64(len(r.Body))
-			reader = io.Reader(strings.NewReader(r.Body))
-		}
-		body = io.NopCloser(reader)
-	} else {
-		body = http.NoBody
+	body, contentLength, err := f.decodeBody(r)
+	if err != nil {
+		return nil, err
 	}
 
 	req := &http.Request{
@@ -239,6 +194,37 @@ func (f *lambdaFunction) httpRequestAPIGatewayV2(ctx context.Context, r request)
 	return req, nil
 }
 
+func (f *lambdaFunction) decodeBody(r *request) (body io.ReadCloser, contentLength int64, err error) {
+	if r.Body != "" {
+		var reader io.Reader
+		if r.IsBase64Encoded {
+			f.buffer.Reset()
+			f.buffer.WriteString(r.Body)
+			n := base64.StdEncoding.DecodedLen(len(r.Body))
+			out := f.out
+			if cap(out) < n {
+				out = make([]byte, n)
+			} else {
+				out = out[:n]
+			}
+			n, err := base64.StdEncoding.Decode(out, f.buffer.Bytes())
+			f.out = out
+			if err != nil {
+				return nil, 0, err
+			}
+			contentLength = int64(n)
+			reader = bytes.NewReader(out[:n])
+		} else {
+			contentLength = int64(len(r.Body))
+			reader = io.Reader(strings.NewReader(r.Body))
+		}
+		body = io.NopCloser(reader)
+	} else {
+		body = http.NoBody
+	}
+	return
+}
+
 type responseWriter struct {
 	w           io.Writer
 	isBinary    bool
@@ -249,11 +235,12 @@ type responseWriter struct {
 }
 
 type response struct {
-	StatusCode        int                 `json:"statusCode"`
-	Headers           map[string]string   `json:"headers"`
-	MultiValueHeaders map[string][]string `json:"multiValueHeaders"`
-	Body              string              `json:"body"`
-	IsBase64Encoded   bool                `json:"isBase64Encoded"`
+	StatusCode        int                 `json:"statusCode,omitempty"`
+	Headers           map[string]string   `json:"headers,omitempty"`
+	MultiValueHeaders map[string][]string `json:"multiValueHeaders,omitempty"`
+	Body              string              `json:"body,omitempty"`
+	IsBase64Encoded   bool                `json:"isBase64Encoded,omitempty"`
+	Cookies           []string            `json:"cookies,omitempty"`
 }
 
 func (f *lambdaFunction) newResponseWriter() *responseWriter {
@@ -325,7 +312,56 @@ func (rw *responseWriter) Write(data []byte) (int, error) {
 	return n1 + n2, nil
 }
 
-func (rw *responseWriter) lambdaResponse() (response, error) {
+func (rw *responseWriter) lambdaResponseV1() (*response, error) {
+	body := rw.encodeBody()
+
+	// fall back to headers if multiValueHeaders is not available
+	h := make(map[string]string, len(rw.header))
+	for key, value := range rw.header {
+		if key == "Set-Cookie" {
+			// we can't fold Set-Cookie header, because the %x2C (",") character is used
+			// by Set-Cookie in a way that conflicts with such folding.
+			if len(value) > 0 {
+				h[key] = value[0]
+			}
+			continue
+		}
+		h[key] = strings.Join(value, ", ")
+	}
+
+	return &response{
+		StatusCode:        rw.statusCode,
+		Headers:           h,
+		MultiValueHeaders: map[string][]string(rw.header),
+		Body:              body,
+		IsBase64Encoded:   rw.isBinary,
+	}, nil
+}
+
+func (rw *responseWriter) lambdaResponseV2() (*response, error) {
+	body := rw.encodeBody()
+
+	// multiValueHeaders is not available in V2; fall back to headers
+	h := make(map[string]string, len(rw.header))
+	for key, value := range rw.header {
+		if key == "Set-Cookie" {
+			continue
+		}
+		h[key] = strings.Join(value, ", ")
+	}
+
+	cookies := rw.header.Values("Set-Cookie")
+
+	return &response{
+		StatusCode:      rw.statusCode,
+		Headers:         h,
+		Cookies:         cookies,
+		Body:            body,
+		IsBase64Encoded: rw.isBinary,
+	}, nil
+}
+
+func (rw *responseWriter) encodeBody() string {
 	if !rw.wroteHeader {
 		rw.WriteHeader(http.StatusOK)
 	}
@@ -348,20 +384,7 @@ func (rw *responseWriter) lambdaResponse() (response, error) {
 	} else {
 		body = rw.lambda.builder.String()
 	}
-
-	// fall back to headers if multiValueHeaders is not available
-	h := make(map[string]string, len(rw.header))
-	for key := range rw.header {
-		h[key] = rw.header.Get(key)
-	}
-
-	return response{
-		StatusCode:        rw.statusCode,
-		Headers:           h,
-		MultiValueHeaders: map[string][]string(rw.header),
-		Body:              body,
-		IsBase64Encoded:   rw.isBinary,
-	}, nil
+	return body
 }
 
 func (rw *responseWriter) detectContentType() {
@@ -416,14 +439,26 @@ func isBinary(contentType string) bool {
 	return true
 }
 
-func (f *lambdaFunction) lambdaHandler(ctx context.Context, req request) (response, error) {
-	r, err := f.httpRequest(ctx, req)
-	if err != nil {
-		return response{}, err
+func (f *lambdaFunction) lambdaHandler(ctx context.Context, req *request) (*response, error) {
+	if isV2Request(req) {
+		// Lambda Function URLs or API Gateway v2
+		r, err := f.httpRequestV2(ctx, req)
+		if err != nil {
+			return &response{}, err
+		}
+		rw := f.newResponseWriter()
+		f.mux.ServeHTTP(rw, r)
+		return rw.lambdaResponseV2()
+	} else {
+		// API Gateway v1 or ALB
+		r, err := f.httpRequestV1(ctx, req)
+		if err != nil {
+			return &response{}, err
+		}
+		rw := f.newResponseWriter()
+		f.mux.ServeHTTP(rw, r)
+		return rw.lambdaResponseV1()
 	}
-	rw := f.newResponseWriter()
-	f.mux.ServeHTTP(rw, r)
-	return rw.lambdaResponse()
 }
 
 func newLambdaFunction(mux http.Handler) *lambdaFunction {

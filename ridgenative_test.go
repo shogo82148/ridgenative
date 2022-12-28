@@ -11,19 +11,19 @@ import (
 	"testing"
 )
 
-func loadRequest(path string) (request, error) {
+func loadRequest(path string) (*request, error) {
 	f, err := os.Open(path)
 	if err != nil {
-		return request{}, err
+		return &request{}, err
 	}
 	defer f.Close()
 
 	var req request
 	dec := json.NewDecoder(f)
 	if err := dec.Decode(&req); err != nil {
-		return request{}, err
+		return &request{}, err
 	}
-	return req, nil
+	return &req, nil
 }
 
 func TestHTTPRequest(t *testing.T) {
@@ -33,7 +33,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -66,7 +66,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -96,7 +96,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -126,7 +126,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -159,7 +159,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -189,7 +189,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV1(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -219,7 +219,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -252,7 +252,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -282,7 +282,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -312,7 +312,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -345,7 +345,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -375,7 +375,7 @@ func TestHTTPRequest(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		httpReq, err := l.httpRequest(context.Background(), req)
+		httpReq, err := l.httpRequestV2(context.Background(), req)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -401,13 +401,20 @@ func TestHTTPRequest(t *testing.T) {
 	})
 }
 
-func TestResponse(t *testing.T) {
+func TestResponseV1(t *testing.T) {
 	l := &lambdaFunction{}
 	t.Run("normal", func(t *testing.T) {
 		rw := l.newResponseWriter()
+		// normal header fields
 		rw.Header().Add("foo", "foo")
+
+		// multi line header fields
 		rw.Header().Add("bar", "bar1")
 		rw.Header().Add("bar", "bar2")
+
+		// cookie
+		rw.Header().Add("Set-Cookie", "foo1=bar1")
+		rw.Header().Add("Set-Cookie", "foo2=bar2")
 
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
 			t.Error(err)
@@ -416,15 +423,18 @@ func TestResponse(t *testing.T) {
 			t.Error(err)
 		}
 
-		resp, err := rw.lambdaResponse()
+		resp, err := rw.lambdaResponseV1()
 		if err != nil {
 			t.Error(err)
 		}
 		if resp.Headers["Foo"] != "foo" {
 			t.Errorf("unexpected header: want %q, got %q", "foo", resp.Headers["Foo"])
 		}
-		if resp.Headers["Bar"] != "bar1" {
-			t.Errorf("unexpected header: want %q, got %q", "foo", resp.Headers["Foo"])
+		if resp.Headers["Bar"] != "bar1, bar2" {
+			t.Errorf("unexpected header: want %q, got %q", "bar1, bar2", resp.Headers["Bar"])
+		}
+		if resp.Headers["Set-Cookie"] != "foo1=bar1" {
+			t.Errorf("unexpected header: want %q, got %q", "bar1, bar2", resp.Headers["Bar"])
 		}
 		if !reflect.DeepEqual(resp.MultiValueHeaders["Foo"], []string{"foo"}) {
 			t.Errorf("unexpected header: want %#v, got %#v", []string{"foo"}, resp.MultiValueHeaders["Foo"])
@@ -458,7 +468,7 @@ func TestResponse(t *testing.T) {
 			t.Error(err)
 		}
 
-		resp, err := rw.lambdaResponse()
+		resp, err := rw.lambdaResponseV1()
 		if err != nil {
 			t.Error(err)
 		}
@@ -489,7 +499,7 @@ func TestResponse(t *testing.T) {
 			t.Error(err)
 		}
 
-		resp, err := rw.lambdaResponse()
+		resp, err := rw.lambdaResponseV1()
 		if err != nil {
 			t.Error(err)
 		}
@@ -525,7 +535,157 @@ func TestResponse(t *testing.T) {
 			t.Error(err)
 		}
 
-		resp, err := rw.lambdaResponse()
+		resp, err := rw.lambdaResponseV1()
+		if err != nil {
+			t.Error(err)
+		}
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("unexpected status code: want %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if resp.Body != "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVQI12NgYAAAAAMAASDVlMcAAAAASUVORK5CYII=" {
+			t.Errorf("unexpected body: want %q, got %q", "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVQI12NgYAAAAAMAASDVlMcAAAAASUVORK5CYII=", resp.Body)
+		}
+		if !resp.IsBase64Encoded {
+			t.Error("unexpected IsBase64Encoded: want true, got false")
+		}
+	})
+}
+
+func TestResponseV2(t *testing.T) {
+	l := &lambdaFunction{}
+	t.Run("normal", func(t *testing.T) {
+		rw := l.newResponseWriter()
+
+		// normal header fields
+		rw.Header().Add("foo", "foo")
+
+		// multi line header fields
+		rw.Header().Add("bar", "bar1")
+		rw.Header().Add("bar", "bar2")
+
+		// cookie
+		rw.Header().Add("Set-Cookie", "foo1=bar1")
+		rw.Header().Add("Set-Cookie", "foo2=bar2")
+
+		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
+			t.Error(err)
+		}
+		if _, err := rw.Write([]byte("<html><body>Hello!</body></html>")); err != nil {
+			t.Error(err)
+		}
+
+		resp, err := rw.lambdaResponseV2()
+		if err != nil {
+			t.Error(err)
+		}
+
+		// test headers
+		if resp.Headers["Foo"] != "foo" {
+			t.Errorf("unexpected header: want %q, got %q", "foo", resp.Headers["Foo"])
+		}
+		if resp.Headers["Bar"] != "bar1, bar2" {
+			t.Errorf("unexpected header: want %q, got %q", "bar1, bar2", resp.Headers["Bar"])
+		}
+		if v, ok := resp.Headers["Set-Cookie"]; ok {
+			t.Errorf("unexpected header: want None, got %q", v)
+		}
+		if got, want := resp.Cookies, []string{"foo1=bar1", "foo2=bar2"}; !reflect.DeepEqual(got, want) {
+			t.Errorf("unexpected cookie: want %#v, got %#v", want, got)
+		}
+
+		// Content-Type is auto detected.
+		if resp.Headers["Content-Type"] != "text/html; charset=utf-8" {
+			t.Errorf("unexpected header: want %q, got %q", "text/html; charset=utf-8", resp.Headers["Content-Type"])
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("unexpected status code: want %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if resp.Body != "<!DOCTYPE html>\n<html><body>Hello!</body></html>" {
+			t.Errorf("unexpected body: want %q, got %q", "<!DOCTYPE html>\n<html><body>Hello!</body></html>", resp.Body)
+		}
+		if resp.IsBase64Encoded {
+			t.Error("unexpected IsBase64Encoded: want false, got true")
+		}
+	})
+	t.Run("set content-type", func(t *testing.T) {
+		rw := l.newResponseWriter()
+		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
+		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
+			t.Error(err)
+		}
+		if _, err := rw.Write([]byte("<html><body>Hello!</body></html>")); err != nil {
+			t.Error(err)
+		}
+
+		resp, err := rw.lambdaResponseV1()
+		if err != nil {
+			t.Error(err)
+		}
+
+		// Content-Type is auto detected.
+		if resp.Headers["Content-Type"] != "text/plain; charset=utf-8" {
+			t.Errorf("unexpected header: want %q, got %q", "text/plain; charset=utf-8", resp.Headers["Content-Type"])
+		}
+
+		if resp.StatusCode != http.StatusOK {
+			t.Errorf("unexpected status code: want %d, got %d", http.StatusOK, resp.StatusCode)
+		}
+		if resp.Body != "<!DOCTYPE html>\n<html><body>Hello!</body></html>" {
+			t.Errorf("unexpected body: want %q, got %q", "<!DOCTYPE html>\n<html><body>Hello!</body></html>", resp.Body)
+		}
+		if resp.IsBase64Encoded {
+			t.Error("unexpected IsBase64Encoded: want false, got true")
+		}
+	})
+	t.Run("redirect to example.com", func(t *testing.T) {
+		rw := l.newResponseWriter()
+		rw.Header().Add("location", "http://example.com/")
+		rw.WriteHeader(http.StatusFound)
+		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
+			t.Error(err)
+		}
+		if _, err := rw.Write([]byte("<html><body>Redirect to <a href=http://example.com/>example.com</a></body></html>")); err != nil {
+			t.Error(err)
+		}
+
+		resp, err := rw.lambdaResponseV1()
+		if err != nil {
+			t.Error(err)
+		}
+		if resp.Headers["Location"] != "http://example.com/" {
+			t.Errorf("unexpected header: want %q, got %q", "http://example.com/", resp.Headers["Foo"])
+		}
+		if resp.StatusCode != http.StatusFound {
+			t.Errorf("unexpected status code: want %d, got %d", http.StatusFound, resp.StatusCode)
+		}
+		if resp.Body != "<!DOCTYPE html>\n<html><body>Redirect to <a href=http://example.com/>example.com</a></body></html>" {
+			t.Errorf("unexpected body: want %q, got %q", "<!DOCTYPE html>\n<html><body>Redirect to <a href=http://example.com/>example.com</a></body></html>", resp.Body)
+		}
+		if resp.IsBase64Encoded {
+			t.Error("unexpected IsBase64Encoded: want false, got true")
+		}
+	})
+	t.Run("base64", func(t *testing.T) {
+		rw := l.newResponseWriter()
+		// 1x1 PNG image
+		if _, err := io.WriteString(rw, "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52"); err != nil {
+			t.Error(err)
+		}
+		if _, err := io.WriteString(rw, "\x00\x00\x00\x01\x00\x00\x00\x01\x08\x04\x00\x00\x00\xb5\x1c\x0c"); err != nil {
+			t.Error(err)
+		}
+		if _, err := io.WriteString(rw, "\x02\x00\x00\x00\x0b\x49\x44\x41\x54\x08\xd7\x63\x60\x60\x00\x00"); err != nil {
+			t.Error(err)
+		}
+		if _, err := io.WriteString(rw, "\x00\x03\x00\x01\x20\xd5\x94\xc7\x00\x00\x00\x00\x49\x45\x4e\x44"); err != nil {
+			t.Error(err)
+		}
+		if _, err := io.WriteString(rw, "\xae\x42\x60\x82"); err != nil {
+			t.Error(err)
+		}
+
+		resp, err := rw.lambdaResponseV1()
 		if err != nil {
 			t.Error(err)
 		}
@@ -552,7 +712,7 @@ func BenchmarkRequest_binary(b *testing.B) {
 	buf := make([]byte, 1024)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r, _ := l.httpRequest(context.Background(), req)
+		r, _ := l.httpRequestV1(context.Background(), req)
 		io.CopyBuffer(io.Discard, r.Body, buf)
 	}
 }
@@ -572,7 +732,7 @@ func BenchmarkRequest_text(b *testing.B) {
 	buf := make([]byte, 1024)
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		r, _ := l.httpRequest(context.Background(), req)
+		r, _ := l.httpRequestV1(context.Background(), req)
 		io.CopyBuffer(io.Discard, r.Body, buf)
 	}
 }
@@ -584,7 +744,7 @@ func BenchmarkResponse_binary(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		rw := l.newResponseWriter()
 		rw.Write(data)
-		rw.lambdaResponse()
+		rw.lambdaResponseV1()
 	}
 }
 
@@ -598,6 +758,6 @@ func BenchmarkResponse_text(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		rw := l.newResponseWriter()
 		rw.Write(data)
-		rw.lambdaResponse()
+		rw.lambdaResponseV1()
 	}
 }
