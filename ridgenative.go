@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
-	"encoding/json"
 	"io"
 	"log"
 	"net/http"
@@ -441,9 +440,6 @@ func isBinary(contentType string) bool {
 }
 
 func (f *lambdaFunction) lambdaHandler(ctx context.Context, req *request) (*response, error) {
-	data, _ := json.Marshal(req)
-	log.Println("request: ", string(data))
-
 	if isV2Request(req) {
 		// Lambda Function URLs or API Gateway v2
 		r, err := f.httpRequestV2(ctx, req)
@@ -452,13 +448,7 @@ func (f *lambdaFunction) lambdaHandler(ctx context.Context, req *request) (*resp
 		}
 		rw := f.newResponseWriter()
 		f.mux.ServeHTTP(rw, r)
-		resp, err := rw.lambdaResponseV2()
-		if err != nil {
-			return nil, err
-		}
-		data, _ := json.Marshal(resp)
-		log.Println("response: ", string(data))
-		return resp, nil
+		return rw.lambdaResponseV2()
 	} else {
 		// API Gateway v1 or ALB
 		r, err := f.httpRequestV1(ctx, req)
@@ -467,13 +457,7 @@ func (f *lambdaFunction) lambdaHandler(ctx context.Context, req *request) (*resp
 		}
 		rw := f.newResponseWriter()
 		f.mux.ServeHTTP(rw, r)
-		resp, err := rw.lambdaResponseV1()
-		if err != nil {
-			return nil, err
-		}
-		data, _ := json.Marshal(resp)
-		log.Println("response: ", string(data))
-		return resp, nil
+		return rw.lambdaResponseV1()
 	}
 }
 
