@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"log"
 	"net/http"
 	"runtime"
@@ -100,7 +99,7 @@ func (c *runtimeAPIClient) post(url string, body io.Reader, contentType string) 
 		return fmt.Errorf("failed to POST to %s: got unexpected status code: %d", url, resp.StatusCode)
 	}
 
-	_, err = io.Copy(ioutil.Discard, resp.Body)
+	_, err = io.Copy(io.Discard, resp.Body)
 	if err != nil {
 		return fmt.Errorf("something went wrong reading the POST response from %s: %v", url, err)
 	}
