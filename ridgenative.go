@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -469,7 +470,7 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 
 // ListenAndServe starts HTTP server.
 //
-// If AWS_EXECUTION_ENV environment value is defined, it wait for new AWS Lambda events and handle it as HTTP requests.
+// If AWS_LAMBDA_RUNTIME_API environment value is defined, it wait for new AWS Lambda events and handle it as HTTP requests.
 // The format of the events is compatible with Amazon API Gateway Lambda proxy integration and Application Load Balancers.
 // See AWS documents for details.
 //
@@ -477,13 +478,18 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 //
 // https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html
 //
-// If AWS_EXECUTION_ENV environment value is NOT defined, it just calls http.ListenAndServe.
+// If AWS_EXECUTION_ENV is AWS_Lambda_go1.x, it returns an error.
+// If AWS_LAMBDA_RUNTIME_API environment value is NOT defined, it just calls http.ListenAndServe.
 //
 // The handler is typically nil, in which case the DefaultServeMux is used.
 func ListenAndServe(address string, mux http.Handler) error {
-	go1 := os.Getenv("AWS_EXECUTION_ENV")      // run on go1.x runtime
+	if go1 := os.Getenv("AWS_EXECUTION_ENV"); go1 == "AWS_Lambda_go1.x" {
+		// run on go1.x runtime
+		return errors.New("ridgenative: go1.x runtime is not supported")
+	}
+
 	al2 := os.Getenv("AWS_LAMBDA_RUNTIME_API") // run on provided or provided.al2 runtime
-	if go1 == "" && al2 == "" {
+	if al2 == "" {
 		// fall back to normal HTTP server.
 		return http.ListenAndServe(address, mux)
 	}
