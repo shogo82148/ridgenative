@@ -16,7 +16,6 @@ import (
 	"strings"
 
 	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
 )
 
 type lambdaFunction struct {
@@ -497,6 +496,6 @@ func ListenAndServe(address string, mux http.Handler) error {
 		mux = http.DefaultServeMux
 	}
 	f := newLambdaFunction(mux)
-	lambda.Start(f.lambdaHandler)
+	startRuntimeAPILoop(al2, f.lambdaHandler)
 	panic("do not reach")
 }
