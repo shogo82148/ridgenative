@@ -251,6 +251,9 @@ func callBytesHandlerFunc(ctx context.Context, payload []byte, h handlerFunc) (r
 	}()
 
 	var req *request
+	if err := json.Unmarshal(payload, &req); err != nil {
+		return nil, lambdaErrorResponse(err)
+	}
 	resp, err := h(ctx, req)
 	if err != nil {
 		return nil, lambdaErrorResponse(err)
