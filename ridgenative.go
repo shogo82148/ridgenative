@@ -14,8 +14,6 @@ import (
 	"path"
 	"runtime"
 	"strings"
-
-	"github.com/aws/aws-lambda-go/events"
 )
 
 type lambdaFunction struct {
@@ -53,19 +51,16 @@ type request struct {
 }
 
 type requestContext struct {
-	// for ALB Target Group events
-	ELB *events.ELBContext `json:"elb"`
-
 	// for API Gateway events
-	AccountID    string                           `json:"accountId"`
-	ResourceID   string                           `json:"resourceId"`
-	Stage        string                           `json:"stage"`
-	RequestID    string                           `json:"requestId"`
-	Identity     events.APIGatewayRequestIdentity `json:"identity"`
-	ResourcePath string                           `json:"resourcePath"`
-	Authorizer   map[string]interface{}           `json:"authorizer"`
-	HTTPMethod   string                           `json:"httpMethod"`
-	APIID        string                           `json:"apiId"` // The API Gateway rest API Id
+	AccountID    string                 `json:"accountId"`
+	ResourceID   string                 `json:"resourceId"`
+	Stage        string                 `json:"stage"`
+	RequestID    string                 `json:"requestId"`
+	Identity     *requestIdentity       `json:"identity"`
+	ResourcePath string                 `json:"resourcePath"`
+	Authorizer   map[string]interface{} `json:"authorizer"`
+	HTTPMethod   string                 `json:"httpMethod"`
+	APIID        string                 `json:"apiId"` // The API Gateway rest API Id
 
 	// for API Gateway v2 events
 	HTTP *requestContextHTTP `json:"http"`
@@ -77,6 +72,23 @@ type requestContextHTTP struct {
 	Protocol  string `json:"protocol"`
 	SourceIP  string `json:"sourceIp"`
 	UserAgent string `json:"userAgent"`
+}
+
+// apiIGatewayRequestIdentity contains identity information for the request caller.
+type requestIdentity struct {
+	CognitoIdentityPoolID         string `json:"cognitoIdentityPoolId"`
+	AccountID                     string `json:"accountId"`
+	CognitoIdentityID             string `json:"cognitoIdentityId"`
+	Caller                        string `json:"caller"`
+	APIKey                        string `json:"apiKey"`
+	APIKeyID                      string `json:"apiKeyId"`
+	AccessKey                     string `json:"accessKey"`
+	SourceIP                      string `json:"sourceIp"`
+	CognitoAuthenticationType     string `json:"cognitoAuthenticationType"`
+	CognitoAuthenticationProvider string `json:"cognitoAuthenticationProvider"`
+	UserArn                       string `json:"userArn"` //nolint: stylecheck
+	UserAgent                     string `json:"userAgent"`
+	User                          string `json:"user"`
 }
 
 func isV2Request(r *request) bool {

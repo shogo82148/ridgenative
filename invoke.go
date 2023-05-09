@@ -14,8 +14,6 @@ import (
 	"strconv"
 	"strings"
 	"time"
-
-	"github.com/aws/aws-lambda-go/lambda/messages"
 )
 
 type invoke struct {
@@ -101,7 +99,24 @@ func parseDeadline(invoke *invoke) (time.Time, error) {
 	return unixMS(deadlineEpochMS), nil
 }
 
-func reportFailure(invoke *invoke, invokeErr *messages.InvokeResponse_Error) error {
+type invokeResponseError struct {
+	Message    string                           `json:"errorMessage"`
+	Type       string                           `json:"errorType"`
+	StackTrace []*invokeResponseErrorStackFrame `json:"stackTrace,omitempty"`
+	ShouldExit bool                             `json:"-"`
+}
+
+type invokeResponseErrorStackFrame struct {
+	Path  string `json:"path"`
+	Line  int32  `json:"line"`
+	Label string `json:"label"`
+}
+
+func (e invokeResponseError) Error() string {
+	return fmt.Sprintf("%#v", e)
+}
+
+func reportFailure(invoke *invoke, invokeErr *invokeResponseError) error {
 	errorPayload := mustMarshal(invokeErr)
 	log.Printf("%s", errorPayload)
 	if err := invoke.failure(bytes.NewReader(errorPayload), contentTypeJSON); err != nil {
@@ -126,12 +141,12 @@ func getErrorType(err interface{}) string {
 	return errorType.Name()
 }
 
-func lambdaPanicResponse(err interface{}) *messages.InvokeResponse_Error {
-	if ive, ok := err.(messages.InvokeResponse_Error); ok {
+func lambdaPanicResponse(err interface{}) *invokeResponseError {
+	if ive, ok := err.(invokeResponseError); ok {
 		return &ive
 	}
 	panicInfo := getPanicInfo(err)
-	return &messages.InvokeResponse_Error{
+	return &invokeResponseError{
 		Message:    panicInfo.Message,
 		Type:       getErrorType(err),
 		StackTrace: panicInfo.StackTrace,
@@ -140,8 +155,8 @@ func lambdaPanicResponse(err interface{}) *messages.InvokeResponse_Error {
 }
 
 type panicInfo struct {
-	Message    string                                      // Value passed to panic call, converted to string
-	StackTrace []*messages.InvokeResponse_Error_StackFrame // Stack trace of the panic
+	Message    string                           `json:"message"`    // Value passed to panic call, converted to string
+	StackTrace []*invokeResponseErrorStackFrame `json:"stackTrace"` // Stack trace of the panic
 }
 
 func getPanicInfo(value interface{}) panicInfo {
@@ -157,12 +172,12 @@ func getPanicMessage(value interface{}) string {
 
 var defaultErrorFrameCount = 32
 
-func getPanicStack() []*messages.InvokeResponse_Error_StackFrame {
+func getPanicStack() []*invokeResponseErrorStackFrame {
 	s := make([]uintptr, defaultErrorFrameCount)
 	const framesToHide = 3 // this (getPanicStack) -> getPanicInfo -> handler defer func
 	n := runtime.Callers(framesToHide, s)
 	if n == 0 {
-		return make([]*messages.InvokeResponse_Error_StackFrame, 0)
+		return make([]*invokeResponseErrorStackFrame, 0)
 	}
 
 	s = s[:n]
@@ -170,8 +185,8 @@ func getPanicStack() []*messages.InvokeResponse_Error_StackFrame {
 	return convertStack(s)
 }
 
-func convertStack(s []uintptr) []*messages.InvokeResponse_Error_StackFrame {
-	var converted []*messages.InvokeResponse_Error_StackFrame
+func convertStack(s []uintptr) []*invokeResponseErrorStackFrame {
+	var converted []*invokeResponseErrorStackFrame
 	frames := runtime.CallersFrames(s)
 
 	for {
@@ -187,12 +202,12 @@ func convertStack(s []uintptr) []*messages.InvokeResponse_Error_StackFrame {
 	return converted
 }
 
-func formatFrame(inputFrame runtime.Frame) *messages.InvokeResponse_Error_StackFrame {
+func formatFrame(inputFrame runtime.Frame) *invokeResponseErrorStackFrame {
 	path := inputFrame.File
 	line := int32(inputFrame.Line)
 	label := inputFrame.Function
 
-	// Strip GOPATH from path by counting the number of seperators in label & path
+	// Strip GOPATH from path by counting the number of separators in label & path
 	//
 	// For example given this:
 	//     GOPATH = /home/user
@@ -207,7 +222,7 @@ func formatFrame(inputFrame runtime.Frame) *messages.InvokeResponse_Error_StackF
 	for n, g := 0, strings.Count(label, "/")+2; n < g; n++ {
 		i = strings.LastIndex(path[:i], "/")
 		if i == -1 {
-			// Something went wrong and path has less seperators than we expected
+			// Something went wrong and path has less separators than we expected
 			// Abort and leave i as -1 to counteract the +1 below
 			break
 		}
@@ -220,15 +235,15 @@ func formatFrame(inputFrame runtime.Frame) *messages.InvokeResponse_Error_StackF
 	// Likewise strip the package name
 	label = label[strings.Index(label, ".")+1:]
 
-	return &messages.InvokeResponse_Error_StackFrame{
+	return &invokeResponseErrorStackFrame{
 		Path:  path,
 		Line:  line,
 		Label: label,
 	}
 }
 
-func lambdaErrorResponse(invokeError error) *messages.InvokeResponse_Error {
-	if ive, ok := invokeError.(messages.InvokeResponse_Error); ok {
+func lambdaErrorResponse(invokeError error) *invokeResponseError {
+	if ive, ok := invokeError.(invokeResponseError); ok {
 		return &ive
 	}
 	var errorName string
@@ -237,13 +252,13 @@ func lambdaErrorResponse(invokeError error) *messages.InvokeResponse_Error {
 	} else {
 		errorName = errorType.Name()
 	}
-	return &messages.InvokeResponse_Error{
+	return &invokeResponseError{
 		Message: invokeError.Error(),
 		Type:    errorName,
 	}
 }
 
-func callBytesHandlerFunc(ctx context.Context, payload []byte, h handlerFunc) (response io.Reader, invokeErr *messages.InvokeResponse_Error) {
+func callBytesHandlerFunc(ctx context.Context, payload []byte, h handlerFunc) (response io.Reader, invokeErr *invokeResponseError) {
 	defer func() {
 		if err := recover(); err != nil {
 			invokeErr = lambdaPanicResponse(err)
