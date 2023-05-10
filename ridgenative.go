@@ -56,7 +56,7 @@ type requestContext struct {
 	ResourceID   string                 `json:"resourceId"`
 	Stage        string                 `json:"stage"`
 	RequestID    string                 `json:"requestId"`
-	Identity     *requestIdentity       `json:"identity"`
+	Identity     requestIdentity        `json:"identity"`
 	ResourcePath string                 `json:"resourcePath"`
 	Authorizer   map[string]interface{} `json:"authorizer"`
 	HTTPMethod   string                 `json:"httpMethod"`
