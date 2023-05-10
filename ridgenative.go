@@ -479,6 +479,36 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 	}
 }
 
+// InvokeMode is the mode that determines which API operation Lambda uses.
+type InvokeMode string
+
+const (
+	// InvokeModeBuffered indicates that your function is invoked using the Invoke API operation.
+	// Invocation results are available when the payload is complete.
+	InvokeModeBuffered InvokeMode = "BUFFERED"
+
+	// InvokeModeResponseStreaming indicates that your function is invoked using
+	// the InvokeWithResponseStream API operation.
+	// It enables your function to stream payload results as they become available.
+	InvokeModeResponseStreaming InvokeMode = "RESPONSE_STREAMING"
+)
+
+// Start starts the AWS Lambda function.
+// The handler is typically nil, in which case the DefaultServeMux is used.
+func Start(mux http.Handler, mode InvokeMode) error {
+	api := os.Getenv("AWS_LAMBDA_RUNTIME_API")
+	if mux == nil {
+		mux = http.DefaultServeMux
+	}
+	f := newLambdaFunction(mux)
+	c := newRuntimeAPIClient(api)
+	if err := c.start(f.lambdaHandler); err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
+}
+
 // ListenAndServe starts HTTP server.
 //
 // If AWS_LAMBDA_RUNTIME_API environment value is defined, it wait for new AWS Lambda events and handle it as HTTP requests.
@@ -493,25 +523,30 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 // If AWS_LAMBDA_RUNTIME_API environment value is NOT defined, it just calls http.ListenAndServe.
 //
 // The handler is typically nil, in which case the DefaultServeMux is used.
+//
+// If AWS_LAMBDA_RUNTIME_API environment value is defined, ListenAndServe uses it as the invoke mode.
+// The default is InvokeModeBuffered.
 func ListenAndServe(address string, mux http.Handler) error {
 	if go1 := os.Getenv("AWS_EXECUTION_ENV"); go1 == "AWS_Lambda_go1.x" {
 		// run on go1.x runtime
 		return errors.New("ridgenative: go1.x runtime is not supported")
 	}
 
-	api := os.Getenv("AWS_LAMBDA_RUNTIME_API") // run on provided or provided.al2 runtime
+	api := os.Getenv("AWS_LAMBDA_RUNTIME_API")
 	if api == "" {
 		// fall back to normal HTTP server.
 		return http.ListenAndServe(address, mux)
 	}
-	if mux == nil {
-		mux = http.DefaultServeMux
+
+	// run on provided or provided.al2 runtime
+	mode := InvokeModeBuffered
+	switch os.Getenv("RIDGENATIVE_INVOKE_MODE") {
+	case "BUFFERED", "":
+		mode = InvokeModeBuffered
+	case "RESPONSE_STREAMING":
+		mode = InvokeModeResponseStreaming
+	default:
+		return errors.New("ridgenative: invalid RIDGENATIVE_INVOKE_MODE")
 	}
-	f := newLambdaFunction(mux)
-	c := newRuntimeAPIClient(api)
-	if err := c.start(f.lambdaHandler); err != nil {
-		log.Println(err)
-		return err
-	}
-	return nil
+	return Start(mux, mode)
 }
