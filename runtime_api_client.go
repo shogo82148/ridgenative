@@ -3,7 +3,9 @@ package ridgenative
 import (
 	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -21,11 +23,15 @@ const (
 	headerCognitoIdentity    = "Lambda-Runtime-Cognito-Identity"
 	headerClientContext      = "Lambda-Runtime-Client-Context"
 	headerInvokedFunctionARN = "Lambda-Runtime-Invoked-Function-Arn"
-	trailerLambdaErrorType   = "Lambda-Runtime-Function-Error-Type"
-	trailerLambdaErrorBody   = "Lambda-Runtime-Function-Error-Body"
-	contentTypeJSON          = "application/json"
-	contentTypeBytes         = "application/octet-stream"
-	apiVersion               = "2018-06-01"
+
+	trailerLambdaErrorType = "Lambda-Runtime-Function-Error-Type"
+	trailerLambdaErrorBody = "Lambda-Runtime-Function-Error-Body"
+
+	contentTypeJSON                    = "application/json"
+	contentTypeBytes                   = "application/octet-stream"
+	contentTypeHTTPIntegrationResponse = "application/vnd.awslambda.http-integration-response"
+
+	apiVersion = "2018-06-01"
 )
 
 type runtimeAPIClient struct {
@@ -96,7 +102,7 @@ func (c *runtimeAPIClient) next() (*invoke, error) {
 	}, nil
 }
 
-// handleInvoke returns an error if the function panics, or some other non-recoverable error occurred
+// handleInvoke handles an invoke.
 func (c *runtimeAPIClient) handleInvoke(invoke *invoke, h handlerFunc) error {
 	// set the deadline
 	deadline, err := parseDeadline(invoke)
@@ -169,6 +175,7 @@ func (c *runtimeAPIClient) post(path string, body []byte, contentType string) er
 	return nil
 }
 
+// reportFailure reports the error to the Runtime API.
 func (c *runtimeAPIClient) reportFailure(invoke *invoke, invokeErr *invokeResponseError) error {
 	body, err := json.Marshal(invokeErr)
 	if err != nil {
@@ -179,4 +186,128 @@ func (c *runtimeAPIClient) reportFailure(invoke *invoke, invokeErr *invokeRespon
 		return fmt.Errorf("ridgenative: unexpected error occurred when sending the function error to the API: %w", err)
 	}
 	return nil
+}
+
+type handlerFuncSteaming func(ctx context.Context, req *request, w *io.PipeWriter) error
+
+func (c *runtimeAPIClient) startStreaming(h handlerFuncSteaming) error {
+	for {
+		invoke, err := c.next()
+		if err != nil {
+			return err
+		}
+		if err := c.handleInvokeStreaming(invoke, nil); err != nil {
+			return err
+		}
+	}
+}
+
+// handleInvoke handles an invoke.
+func (c *runtimeAPIClient) handleInvokeStreaming(invoke *invoke, h handlerFuncSteaming) error {
+	// set the deadline
+	deadline, err := parseDeadline(invoke)
+	if err != nil {
+		return c.reportFailure(invoke, lambdaErrorResponse(err))
+	}
+	ctx, cancel := context.WithDeadline(context.TODO(), deadline)
+	defer cancel()
+
+	// set the trace id
+	traceID := invoke.headers.Get(headerTraceID)
+	os.Setenv("_X_AMZN_TRACE_ID", traceID)
+	// to keep compatibility with AWS Lambda X-Ray SDK, we need to set "x-amzn-trace-id" to the context.
+	// nolint:staticcheck
+	ctx = context.WithValue(ctx, "x-amzn-trace-id", traceID)
+
+	// call the handler, marshal any returned error
+	response, err := callHandlerFuncSteaming(ctx, invoke.payload, h)
+	if err != nil {
+		invokeErr := lambdaErrorResponse(err)
+		if err := c.reportFailure(invoke, invokeErr); err != nil {
+			return err
+		}
+		if invokeErr.ShouldExit {
+			return fmt.Errorf("calling the handler function resulted in a panic, the process should exit")
+		}
+		return nil
+	}
+
+	if err := c.postStreaming(invoke.id+"/response", response, contentTypeHTTPIntegrationResponse); err != nil {
+		return fmt.Errorf("unexpected error occurred when sending the function functionResponse to the API: %w", err)
+	}
+
+	return nil
+}
+
+// postStreaming posts body to the Runtime API at the given path.
+func (c *runtimeAPIClient) postStreaming(path string, body io.ReadCloser, contentType string) error {
+	b := newErrorCapturingReader(body)
+	url := c.baseURL + path
+	req, err := http.NewRequest(http.MethodPost, url, b)
+	if err != nil {
+		return fmt.Errorf("ridgenative: failed to construct POST request to %s: %w", url, err)
+	}
+	req.Trailer = b.trailer
+	req.Header.Set("User-Agent", c.userAgent)
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("ridgenative: failed to POST to %s: %v", url, err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusAccepted {
+		return fmt.Errorf("ridgenative: failed to POST to %s: got unexpected status code: %d", url, resp.StatusCode)
+	}
+
+	_, err = io.Copy(io.Discard, resp.Body)
+	if err != nil {
+		return fmt.Errorf("ridgenative: something went wrong reading the POST response from %s: %w", url, err)
+	}
+
+	return nil
+}
+
+// errorCapturingReader is a reader that captures the first error returned by the underlying reader.
+type errorCapturingReader struct {
+	reader  io.ReadCloser
+	err     error
+	trailer http.Header
+}
+
+func newErrorCapturingReader(r io.ReadCloser) *errorCapturingReader {
+	return &errorCapturingReader{
+		reader:  r,
+		trailer: http.Header{},
+	}
+}
+
+func (r *errorCapturingReader) Read(p []byte) (int, error) {
+	if r.reader == nil {
+		return 0, io.EOF
+	}
+	if r.err != nil {
+		return 0, r.err
+	}
+
+	n, err := r.reader.Read(p)
+	if err != nil && errors.Is(err, io.EOF) {
+		// capture the error
+		r.err = err
+		lambdaErr := lambdaErrorResponse(err)
+		body, err := json.Marshal(lambdaErr)
+		if err != nil {
+			// marshaling lambdaErr always succeeds
+			// because lambdaErr doesn't have any functions and channels.
+			panic(err)
+		}
+		r.trailer.Set(trailerLambdaErrorType, lambdaErr.Type)
+		r.trailer.Set(trailerLambdaErrorBody, base64.StdEncoding.EncodeToString(body))
+	}
+	return n, err
+}
+
+func (r *errorCapturingReader) Close() error {
+	return r.reader.Close()
 }

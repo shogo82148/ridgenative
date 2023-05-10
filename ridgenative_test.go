@@ -402,9 +402,8 @@ func TestHTTPRequest(t *testing.T) {
 }
 
 func TestResponseV1(t *testing.T) {
-	l := &lambdaFunction{}
 	t.Run("normal", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		// normal header fields
 		rw.Header().Add("foo", "foo")
 
@@ -459,7 +458,7 @@ func TestResponseV1(t *testing.T) {
 		}
 	})
 	t.Run("set content-type", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
 			t.Error(err)
@@ -489,7 +488,7 @@ func TestResponseV1(t *testing.T) {
 		}
 	})
 	t.Run("redirect to example.com", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Header().Add("location", "http://example.com/")
 		rw.WriteHeader(http.StatusFound)
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
@@ -517,7 +516,7 @@ func TestResponseV1(t *testing.T) {
 		}
 	})
 	t.Run("base64", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		// 1x1 PNG image
 		if _, err := io.WriteString(rw, "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52"); err != nil {
 			t.Error(err)
@@ -552,9 +551,8 @@ func TestResponseV1(t *testing.T) {
 }
 
 func TestResponseV2(t *testing.T) {
-	l := &lambdaFunction{}
 	t.Run("normal", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 
 		// normal header fields
 		rw.Header().Add("foo", "foo")
@@ -609,7 +607,7 @@ func TestResponseV2(t *testing.T) {
 		}
 	})
 	t.Run("set content-type", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
 			t.Error(err)
@@ -639,7 +637,7 @@ func TestResponseV2(t *testing.T) {
 		}
 	})
 	t.Run("redirect to example.com", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Header().Add("location", "http://example.com/")
 		rw.WriteHeader(http.StatusFound)
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
@@ -667,7 +665,7 @@ func TestResponseV2(t *testing.T) {
 		}
 	})
 	t.Run("base64", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		// 1x1 PNG image
 		if _, err := io.WriteString(rw, "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52"); err != nil {
 			t.Error(err)
@@ -738,25 +736,23 @@ func BenchmarkRequest_text(b *testing.B) {
 }
 
 func BenchmarkResponse_binary(b *testing.B) {
-	l := newLambdaFunction(nil)
 	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Write(data)
 		rw.lambdaResponseV1()
 	}
 }
 
 func BenchmarkResponse_text(b *testing.B) {
-	l := newLambdaFunction(nil)
 	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
 	for i := 0; i < len(data); i++ {
 		data[i] = 'a'
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Write(data)
 		rw.lambdaResponseV1()
 	}
