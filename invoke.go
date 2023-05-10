@@ -9,10 +9,7 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"reflect"
-	"runtime"
 	"strconv"
-	"strings"
 	"time"
 )
 
@@ -49,15 +46,14 @@ func handleInvoke(invoke *invoke, h handlerFunc) error {
 	ctx, cancel := context.WithDeadline(context.TODO(), deadline)
 	defer cancel()
 
-	// TODO: set the invoke metadata values
-
 	// set the trace id
 	traceID := invoke.headers.Get(headerTraceID)
 	os.Setenv("_X_AMZN_TRACE_ID", traceID)
+	// to keep compatibility with AWS Lambda X-Ray SDK, we need to set "x-amzn-trace-id" to the context.
 	// nolint:staticcheck
 	ctx = context.WithValue(ctx, "x-amzn-trace-id", traceID)
 
-	// TODO: call the handler, marshal any returned error
+	// call the handler, marshal any returned error
 	response, invokeErr := callBytesHandlerFunc(ctx, invoke.payload, h)
 	if invokeErr != nil {
 		if err := reportFailure(invoke, invokeErr); err != nil {
@@ -95,23 +91,6 @@ func parseDeadline(invoke *invoke) (time.Time, error) {
 	return time.UnixMilli(deadlineEpochMS), nil
 }
 
-type invokeResponseError struct {
-	Message    string                           `json:"errorMessage"`
-	Type       string                           `json:"errorType"`
-	StackTrace []*invokeResponseErrorStackFrame `json:"stackTrace,omitempty"`
-	ShouldExit bool                             `json:"-"`
-}
-
-type invokeResponseErrorStackFrame struct {
-	Path  string `json:"path"`
-	Line  int32  `json:"line"`
-	Label string `json:"label"`
-}
-
-func (e invokeResponseError) Error() string {
-	return fmt.Sprintf("%#v", e)
-}
-
 func reportFailure(invoke *invoke, invokeErr *invokeResponseError) error {
 	errorPayload := mustMarshal(invokeErr)
 	log.Printf("%s", errorPayload)
@@ -127,131 +106,6 @@ func mustMarshal(v interface{}) []byte {
 		panic(err)
 	}
 	return payload
-}
-
-func getErrorType(err interface{}) string {
-	errorType := reflect.TypeOf(err)
-	if errorType.Kind() == reflect.Ptr {
-		return errorType.Elem().Name()
-	}
-	return errorType.Name()
-}
-
-func lambdaPanicResponse(err interface{}) *invokeResponseError {
-	if ive, ok := err.(invokeResponseError); ok {
-		return &ive
-	}
-	panicInfo := getPanicInfo(err)
-	return &invokeResponseError{
-		Message:    panicInfo.Message,
-		Type:       getErrorType(err),
-		StackTrace: panicInfo.StackTrace,
-		ShouldExit: true,
-	}
-}
-
-type panicInfo struct {
-	Message    string                           `json:"message"`    // Value passed to panic call, converted to string
-	StackTrace []*invokeResponseErrorStackFrame `json:"stackTrace"` // Stack trace of the panic
-}
-
-func getPanicInfo(value interface{}) panicInfo {
-	message := getPanicMessage(value)
-	stack := getPanicStack()
-
-	return panicInfo{Message: message, StackTrace: stack}
-}
-
-func getPanicMessage(value interface{}) string {
-	return fmt.Sprintf("%v", value)
-}
-
-var defaultErrorFrameCount = 32
-
-func getPanicStack() []*invokeResponseErrorStackFrame {
-	s := make([]uintptr, defaultErrorFrameCount)
-	const framesToHide = 3 // this (getPanicStack) -> getPanicInfo -> handler defer func
-	n := runtime.Callers(framesToHide, s)
-	if n == 0 {
-		return make([]*invokeResponseErrorStackFrame, 0)
-	}
-
-	s = s[:n]
-
-	return convertStack(s)
-}
-
-func convertStack(s []uintptr) []*invokeResponseErrorStackFrame {
-	var converted []*invokeResponseErrorStackFrame
-	frames := runtime.CallersFrames(s)
-
-	for {
-		frame, more := frames.Next()
-
-		formattedFrame := formatFrame(frame)
-		converted = append(converted, formattedFrame)
-
-		if !more {
-			break
-		}
-	}
-	return converted
-}
-
-func formatFrame(inputFrame runtime.Frame) *invokeResponseErrorStackFrame {
-	path := inputFrame.File
-	line := int32(inputFrame.Line)
-	label := inputFrame.Function
-
-	// Strip GOPATH from path by counting the number of separators in label & path
-	//
-	// For example given this:
-	//     GOPATH = /home/user
-	//     path   = /home/user/src/pkg/sub/file.go
-	//     label  = pkg/sub.Type.Method
-	//
-	// We want to set:
-	//     path  = pkg/sub/file.go
-	//     label = Type.Method
-
-	i := len(path)
-	for n, g := 0, strings.Count(label, "/")+2; n < g; n++ {
-		i = strings.LastIndex(path[:i], "/")
-		if i == -1 {
-			// Something went wrong and path has less separators than we expected
-			// Abort and leave i as -1 to counteract the +1 below
-			break
-		}
-	}
-
-	path = path[i+1:] // Trim the initial /
-
-	// Strip the path from the function name as it's already in the path
-	label = label[strings.LastIndex(label, "/")+1:]
-	// Likewise strip the package name
-	label = label[strings.Index(label, ".")+1:]
-
-	return &invokeResponseErrorStackFrame{
-		Path:  path,
-		Line:  line,
-		Label: label,
-	}
-}
-
-func lambdaErrorResponse(invokeError error) *invokeResponseError {
-	if ive, ok := invokeError.(invokeResponseError); ok {
-		return &ive
-	}
-	var errorName string
-	if errorType := reflect.TypeOf(invokeError); errorType.Kind() == reflect.Ptr {
-		errorName = errorType.Elem().Name()
-	} else {
-		errorName = errorType.Name()
-	}
-	return &invokeResponseError{
-		Message: invokeError.Error(),
-		Type:    errorName,
-	}
 }
 
 func callBytesHandlerFunc(ctx context.Context, payload []byte, h handlerFunc) (response io.Reader, invokeErr *invokeResponseError) {
