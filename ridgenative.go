@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"errors"
 	"io"
 	"log"
 	"net/http"
@@ -13,9 +14,6 @@ import (
 	"path"
 	"runtime"
 	"strings"
-
-	"github.com/aws/aws-lambda-go/events"
-	"github.com/aws/aws-lambda-go/lambda"
 )
 
 type lambdaFunction struct {
@@ -53,19 +51,16 @@ type request struct {
 }
 
 type requestContext struct {
-	// for ALB Target Group events
-	ELB *events.ELBContext `json:"elb"`
-
 	// for API Gateway events
-	AccountID    string                           `json:"accountId"`
-	ResourceID   string                           `json:"resourceId"`
-	Stage        string                           `json:"stage"`
-	RequestID    string                           `json:"requestId"`
-	Identity     events.APIGatewayRequestIdentity `json:"identity"`
-	ResourcePath string                           `json:"resourcePath"`
-	Authorizer   map[string]interface{}           `json:"authorizer"`
-	HTTPMethod   string                           `json:"httpMethod"`
-	APIID        string                           `json:"apiId"` // The API Gateway rest API Id
+	AccountID    string                 `json:"accountId"`
+	ResourceID   string                 `json:"resourceId"`
+	Stage        string                 `json:"stage"`
+	RequestID    string                 `json:"requestId"`
+	Identity     requestIdentity        `json:"identity"`
+	ResourcePath string                 `json:"resourcePath"`
+	Authorizer   map[string]interface{} `json:"authorizer"`
+	HTTPMethod   string                 `json:"httpMethod"`
+	APIID        string                 `json:"apiId"` // The API Gateway rest API Id
 
 	// for API Gateway v2 events
 	HTTP *requestContextHTTP `json:"http"`
@@ -77,6 +72,23 @@ type requestContextHTTP struct {
 	Protocol  string `json:"protocol"`
 	SourceIP  string `json:"sourceIp"`
 	UserAgent string `json:"userAgent"`
+}
+
+// apiIGatewayRequestIdentity contains identity information for the request caller.
+type requestIdentity struct {
+	CognitoIdentityPoolID         string `json:"cognitoIdentityPoolId"`
+	AccountID                     string `json:"accountId"`
+	CognitoIdentityID             string `json:"cognitoIdentityId"`
+	Caller                        string `json:"caller"`
+	APIKey                        string `json:"apiKey"`
+	APIKeyID                      string `json:"apiKeyId"`
+	AccessKey                     string `json:"accessKey"`
+	SourceIP                      string `json:"sourceIp"`
+	CognitoAuthenticationType     string `json:"cognitoAuthenticationType"`
+	CognitoAuthenticationProvider string `json:"cognitoAuthenticationProvider"`
+	UserArn                       string `json:"userArn"` //nolint: stylecheck
+	UserAgent                     string `json:"userAgent"`
+	User                          string `json:"user"`
 }
 
 func isV2Request(r *request) bool {
@@ -469,7 +481,7 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 
 // ListenAndServe starts HTTP server.
 //
-// If AWS_EXECUTION_ENV environment value is defined, it wait for new AWS Lambda events and handle it as HTTP requests.
+// If AWS_LAMBDA_RUNTIME_API environment value is defined, it wait for new AWS Lambda events and handle it as HTTP requests.
 // The format of the events is compatible with Amazon API Gateway Lambda proxy integration and Application Load Balancers.
 // See AWS documents for details.
 //
@@ -477,13 +489,18 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 //
 // https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html
 //
-// If AWS_EXECUTION_ENV environment value is NOT defined, it just calls http.ListenAndServe.
+// If AWS_EXECUTION_ENV is AWS_Lambda_go1.x, it returns an error.
+// If AWS_LAMBDA_RUNTIME_API environment value is NOT defined, it just calls http.ListenAndServe.
 //
 // The handler is typically nil, in which case the DefaultServeMux is used.
 func ListenAndServe(address string, mux http.Handler) error {
-	go1 := os.Getenv("AWS_EXECUTION_ENV")      // run on go1.x runtime
-	al2 := os.Getenv("AWS_LAMBDA_RUNTIME_API") // run on provided or provided.al2 runtime
-	if go1 == "" && al2 == "" {
+	if go1 := os.Getenv("AWS_EXECUTION_ENV"); go1 == "AWS_Lambda_go1.x" {
+		// run on go1.x runtime
+		return errors.New("ridgenative: go1.x runtime is not supported")
+	}
+
+	api := os.Getenv("AWS_LAMBDA_RUNTIME_API") // run on provided or provided.al2 runtime
+	if api == "" {
 		// fall back to normal HTTP server.
 		return http.ListenAndServe(address, mux)
 	}
@@ -491,6 +508,10 @@ func ListenAndServe(address string, mux http.Handler) error {
 		mux = http.DefaultServeMux
 	}
 	f := newLambdaFunction(mux)
-	lambda.Start(f.lambdaHandler)
-	panic("do not reach")
+	c := newRuntimeAPIClient(api)
+	if err := c.start(f.lambdaHandler); err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
 }
