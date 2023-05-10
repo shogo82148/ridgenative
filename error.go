@@ -22,7 +22,7 @@ func (e *invokeResponseError) Error() string {
 // invokeResponseErrorStackFrame is a single frame in the stack trace.
 type invokeResponseErrorStackFrame struct {
 	Path  string `json:"path"`
-	Line  int32  `json:"line"`
+	Line  int    `json:"line"`
 	Label string `json:"label"`
 }
 
@@ -33,7 +33,7 @@ type panicInfo struct {
 }
 
 // getPanicInfo returns the panic information.
-func getPanicInfo(value interface{}) panicInfo {
+func getPanicInfo(value any) panicInfo {
 	message := fmt.Sprint(value)
 	stack := getPanicStack()
 
@@ -75,7 +75,7 @@ func convertStack(s []uintptr) []*invokeResponseErrorStackFrame {
 // formatFrame formats a runtime.Frame into an invokeResponseErrorStackFrame.
 func formatFrame(inputFrame runtime.Frame) *invokeResponseErrorStackFrame {
 	path := inputFrame.File
-	line := int32(inputFrame.Line)
+	line := inputFrame.Line
 	label := inputFrame.Function
 
 	// Strip GOPATH from path by counting the number of separators in label & path
@@ -114,7 +114,7 @@ func formatFrame(inputFrame runtime.Frame) *invokeResponseErrorStackFrame {
 }
 
 // getPanicInfo returns the type name of err.
-func getErrorType(err interface{}) string {
+func getErrorType(err any) string {
 	errorType := reflect.TypeOf(err)
 	if errorType.Kind() == reflect.Ptr {
 		return errorType.Elem().Name()
@@ -123,7 +123,7 @@ func getErrorType(err interface{}) string {
 }
 
 // lambdaPanicResponse returns the error response for a panic.
-func lambdaPanicResponse(err interface{}) *invokeResponseError {
+func lambdaPanicResponse(err any) *invokeResponseError {
 	if ive, ok := err.(*invokeResponseError); ok {
 		return ive
 	}
