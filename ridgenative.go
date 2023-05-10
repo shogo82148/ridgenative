@@ -499,8 +499,8 @@ func ListenAndServe(address string, mux http.Handler) error {
 		return errors.New("ridgenative: go1.x runtime is not supported")
 	}
 
-	al2 := os.Getenv("AWS_LAMBDA_RUNTIME_API") // run on provided or provided.al2 runtime
-	if al2 == "" {
+	api := os.Getenv("AWS_LAMBDA_RUNTIME_API") // run on provided or provided.al2 runtime
+	if api == "" {
 		// fall back to normal HTTP server.
 		return http.ListenAndServe(address, mux)
 	}
@@ -508,6 +508,10 @@ func ListenAndServe(address string, mux http.Handler) error {
 		mux = http.DefaultServeMux
 	}
 	f := newLambdaFunction(mux)
-	startRuntimeAPILoop(al2, f.lambdaHandler)
-	panic("do not reach")
+	c := newRuntimeAPIClient(api)
+	if err := c.start(f.lambdaHandler); err != nil {
+		log.Println(err)
+		return err
+	}
+	return nil
 }
