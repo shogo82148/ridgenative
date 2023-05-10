@@ -146,7 +146,7 @@ func (c *runtimeAPIClient) post(path string, body []byte, contentType string) er
 	url := c.baseURL + path
 	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
-		return fmt.Errorf("ridgenative: failed to construct POST request to %s: %v", url, err)
+		return fmt.Errorf("ridgenative: failed to construct POST request to %s: %w", url, err)
 	}
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Content-Type", contentType)
@@ -155,18 +155,15 @@ func (c *runtimeAPIClient) post(path string, body []byte, contentType string) er
 	if err != nil {
 		return fmt.Errorf("ridgenative: failed to POST to %s: %v", url, err)
 	}
-	defer func() {
-		if err := resp.Body.Close(); err != nil {
-			log.Printf("ridgenative: runtime API client failed to close %s response body: %v", url, err)
-		}
-	}()
+	defer resp.Body.Close()
+
 	if resp.StatusCode != http.StatusAccepted {
 		return fmt.Errorf("ridgenative: failed to POST to %s: got unexpected status code: %d", url, resp.StatusCode)
 	}
 
 	_, err = io.Copy(io.Discard, resp.Body)
 	if err != nil {
-		return fmt.Errorf("ridgenative: something went wrong reading the POST response from %s: %v", url, err)
+		return fmt.Errorf("ridgenative: something went wrong reading the POST response from %s: %w", url, err)
 	}
 
 	return nil

@@ -519,7 +519,7 @@ func Start(mux http.Handler, mode InvokeMode) error {
 //
 // https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html
 //
-// If AWS_EXECUTION_ENV is AWS_Lambda_go1.x, it returns an error.
+// If AWS_EXECUTION_ENV environment value is AWS_Lambda_go1.x, it returns an error.
 // If AWS_LAMBDA_RUNTIME_API environment value is NOT defined, it just calls http.ListenAndServe.
 //
 // The handler is typically nil, in which case the DefaultServeMux is used.
