@@ -87,16 +87,12 @@ func handleInvoke(invoke *invoke, h handlerFunc) error {
 	return nil
 }
 
-func unixMS(ms int64) time.Time {
-	return time.Unix(ms/1000, (ms%1000)*1000)
-}
-
 func parseDeadline(invoke *invoke) (time.Time, error) {
 	deadlineEpochMS, err := strconv.ParseInt(invoke.headers.Get(headerDeadlineMS), 10, 64)
 	if err != nil {
-		return time.Time{}, fmt.Errorf("failed to parse deadline: %v", err)
+		return time.Time{}, fmt.Errorf("ridgenative: failed to parse deadline: %w", err)
 	}
-	return unixMS(deadlineEpochMS), nil
+	return time.UnixMilli(deadlineEpochMS), nil
 }
 
 type invokeResponseError struct {
