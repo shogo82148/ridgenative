@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -420,6 +421,13 @@ func (f *lambdaFunction) lambdaHandler(ctx context.Context, req *request) (*resp
 	}
 }
 
+type streamingResponse struct {
+	StatusCode int               `json:"statusCode"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	Cookies    []string          `json:"cookies,omitempty"`
+}
+
+// streamingResponseWriter is a http.ResponseWriter that supports streaming.
 type streamingResponseWriter struct {
 	w           *io.PipeWriter
 	buf         *bufio.Writer
@@ -447,14 +455,32 @@ func (rw *streamingResponseWriter) WriteHeader(code int) {
 		return
 	}
 	rw.statusCode = code
+	r := &streamingResponse{
+		StatusCode: code,
+	}
+	data, err := json.Marshal(r)
+	if err != nil {
+		log.Printf("ridgenative: %v", err)
+		return
+	}
+	rw.buf.Write(data)
+	rw.buf.WriteString("\x00\x00\x00\x00\x00\x00\x00\x00")
+	rw.buf.Flush()
 	rw.wroteHeader = true
 }
 
 func (rw *streamingResponseWriter) Write(data []byte) (int, error) {
+	if !rw.wroteHeader {
+		// TODO: detect content type if it is not set.
+		rw.WriteHeader(http.StatusOK)
+	}
 	return rw.w.Write(data)
 }
 
 func (rw *streamingResponseWriter) closeWithError(err error) error {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
 	err0 := rw.buf.Flush()
 	if err1 := rw.w.CloseWithError(err); err0 == nil {
 		err0 = err1
@@ -463,11 +489,21 @@ func (rw *streamingResponseWriter) closeWithError(err error) error {
 }
 
 func (rw *streamingResponseWriter) close() error {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
 	err0 := rw.buf.Flush()
 	if err1 := rw.w.Close(); err0 == nil {
 		err0 = err1
 	}
 	return err0
+}
+
+func (rw *streamingResponseWriter) Flush() {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
+	rw.buf.Flush()
 }
 
 func (f *lambdaFunction) lambdaHandlerStreaming(ctx context.Context, req *request, w *io.PipeWriter) error {
