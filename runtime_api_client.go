@@ -196,7 +196,7 @@ func (c *runtimeAPIClient) startStreaming(h handlerFuncSteaming) error {
 		if err != nil {
 			return err
 		}
-		if err := c.handleInvokeStreaming(invoke, nil); err != nil {
+		if err := c.handleInvokeStreaming(invoke, h); err != nil {
 			return err
 		}
 	}
