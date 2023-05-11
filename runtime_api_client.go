@@ -58,22 +58,22 @@ func newRuntimeAPIClient(address string) *runtimeAPIClient {
 // handlerFunc is the type of the function that handles an invoke.
 type handlerFunc func(ctx context.Context, req *request) (*response, error)
 
-func (c *runtimeAPIClient) start(h handlerFunc) error {
+func (c *runtimeAPIClient) start(ctx context.Context, h handlerFunc) error {
 	for {
-		invoke, err := c.next()
+		invoke, err := c.next(ctx)
 		if err != nil {
 			return err
 		}
-		if err := c.handleInvoke(invoke, h); err != nil {
+		if err := c.handleInvoke(ctx, invoke, h); err != nil {
 			return err
 		}
 	}
 }
 
 // next connects to the Runtime API and waits for a new invoke Request to be available.
-func (c *runtimeAPIClient) next() (*invoke, error) {
+func (c *runtimeAPIClient) next(ctx context.Context) (*invoke, error) {
 	url := c.baseURL + "next"
-	req, err := http.NewRequest(http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if err != nil {
 		return nil, fmt.Errorf("ridgenative: failed to construct GET request to %s: %w", url, err)
 	}
@@ -103,13 +103,13 @@ func (c *runtimeAPIClient) next() (*invoke, error) {
 }
 
 // handleInvoke handles an invoke.
-func (c *runtimeAPIClient) handleInvoke(invoke *invoke, h handlerFunc) error {
+func (c *runtimeAPIClient) handleInvoke(ctx context.Context, invoke *invoke, h handlerFunc) error {
 	// set the deadline
 	deadline, err := parseDeadline(invoke)
 	if err != nil {
-		return c.reportFailure(invoke, lambdaErrorResponse(err))
+		return c.reportFailure(ctx, invoke, lambdaErrorResponse(err))
 	}
-	ctx, cancel := context.WithDeadline(context.TODO(), deadline)
+	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 
 	// set the trace id
@@ -123,7 +123,7 @@ func (c *runtimeAPIClient) handleInvoke(invoke *invoke, h handlerFunc) error {
 	response, err := callBytesHandlerFunc(ctx, invoke.payload, h)
 	if err != nil {
 		invokeErr := lambdaErrorResponse(err)
-		if err := c.reportFailure(invoke, invokeErr); err != nil {
+		if err := c.reportFailure(ctx, invoke, invokeErr); err != nil {
 			return err
 		}
 		if invokeErr.ShouldExit {
@@ -132,7 +132,7 @@ func (c *runtimeAPIClient) handleInvoke(invoke *invoke, h handlerFunc) error {
 		return nil
 	}
 
-	if err := c.post(invoke.id+"/response", response, contentTypeJSON); err != nil {
+	if err := c.post(ctx, invoke.id+"/response", response, contentTypeJSON); err != nil {
 		return fmt.Errorf("unexpected error occurred when sending the function functionResponse to the API: %w", err)
 	}
 
@@ -148,9 +148,9 @@ func parseDeadline(invoke *invoke) (time.Time, error) {
 }
 
 // post posts body to the Runtime API at the given path.
-func (c *runtimeAPIClient) post(path string, body []byte, contentType string) error {
+func (c *runtimeAPIClient) post(ctx context.Context, path string, body []byte, contentType string) error {
 	url := c.baseURL + path
-	req, err := http.NewRequest(http.MethodPost, url, bytes.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewReader(body))
 	if err != nil {
 		return fmt.Errorf("ridgenative: failed to construct POST request to %s: %w", url, err)
 	}
@@ -176,13 +176,13 @@ func (c *runtimeAPIClient) post(path string, body []byte, contentType string) er
 }
 
 // reportFailure reports the error to the Runtime API.
-func (c *runtimeAPIClient) reportFailure(invoke *invoke, invokeErr *invokeResponseError) error {
+func (c *runtimeAPIClient) reportFailure(ctx context.Context, invoke *invoke, invokeErr *invokeResponseError) error {
 	body, err := json.Marshal(invokeErr)
 	if err != nil {
 		return fmt.Errorf("ridgenative: failed to marshal the function error: %w", err)
 	}
 	log.Printf("%s", body)
-	if err := c.post(invoke.id+"/error", body, contentTypeJSON); err != nil {
+	if err := c.post(ctx, invoke.id+"/error", body, contentTypeJSON); err != nil {
 		return fmt.Errorf("ridgenative: unexpected error occurred when sending the function error to the API: %w", err)
 	}
 	return nil
@@ -190,26 +190,26 @@ func (c *runtimeAPIClient) reportFailure(invoke *invoke, invokeErr *invokeRespon
 
 type handlerFuncSteaming func(ctx context.Context, req *request, w *io.PipeWriter) error
 
-func (c *runtimeAPIClient) startStreaming(h handlerFuncSteaming) error {
+func (c *runtimeAPIClient) startStreaming(ctx context.Context, h handlerFuncSteaming) error {
 	for {
-		invoke, err := c.next()
+		invoke, err := c.next(ctx)
 		if err != nil {
 			return err
 		}
-		if err := c.handleInvokeStreaming(invoke, h); err != nil {
+		if err := c.handleInvokeStreaming(ctx, invoke, h); err != nil {
 			return err
 		}
 	}
 }
 
 // handleInvoke handles an invoke.
-func (c *runtimeAPIClient) handleInvokeStreaming(invoke *invoke, h handlerFuncSteaming) error {
+func (c *runtimeAPIClient) handleInvokeStreaming(ctx context.Context, invoke *invoke, h handlerFuncSteaming) error {
 	// set the deadline
 	deadline, err := parseDeadline(invoke)
 	if err != nil {
-		return c.reportFailure(invoke, lambdaErrorResponse(err))
+		return c.reportFailure(ctx, invoke, lambdaErrorResponse(err))
 	}
-	ctx, cancel := context.WithDeadline(context.TODO(), deadline)
+	ctx, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 
 	// set the trace id
@@ -223,7 +223,7 @@ func (c *runtimeAPIClient) handleInvokeStreaming(invoke *invoke, h handlerFuncSt
 	response, err := callHandlerFuncSteaming(ctx, invoke.payload, h)
 	if err != nil {
 		invokeErr := lambdaErrorResponse(err)
-		if err := c.reportFailure(invoke, invokeErr); err != nil {
+		if err := c.reportFailure(ctx, invoke, invokeErr); err != nil {
 			return err
 		}
 		if invokeErr.ShouldExit {
@@ -232,7 +232,7 @@ func (c *runtimeAPIClient) handleInvokeStreaming(invoke *invoke, h handlerFuncSt
 		return nil
 	}
 
-	if err := c.postStreaming(invoke.id+"/response", response, contentTypeHTTPIntegrationResponse); err != nil {
+	if err := c.postStreaming(ctx, invoke.id+"/response", response, contentTypeHTTPIntegrationResponse); err != nil {
 		return fmt.Errorf("unexpected error occurred when sending the function functionResponse to the API: %w", err)
 	}
 
@@ -240,10 +240,10 @@ func (c *runtimeAPIClient) handleInvokeStreaming(invoke *invoke, h handlerFuncSt
 }
 
 // postStreaming posts body to the Runtime API at the given path.
-func (c *runtimeAPIClient) postStreaming(path string, body io.ReadCloser, contentType string) error {
+func (c *runtimeAPIClient) postStreaming(ctx context.Context, path string, body io.ReadCloser, contentType string) error {
 	b := newErrorCapturingReader(body)
 	url := c.baseURL + path
-	req, err := http.NewRequest(http.MethodPost, url, b)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, b)
 	if err != nil {
 		return fmt.Errorf("ridgenative: failed to construct POST request to %s: %w", url, err)
 	}

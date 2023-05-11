@@ -556,12 +556,12 @@ func Start(mux http.Handler, mode InvokeMode) error {
 	c := newRuntimeAPIClient(api)
 	switch mode {
 	case InvokeModeBuffered:
-		if err := c.start(f.lambdaHandler); err != nil {
+		if err := c.start(context.Background(), f.lambdaHandler); err != nil {
 			log.Println(err)
 			return err
 		}
 	case InvokeModeResponseStream:
-		if err := c.startStreaming(f.lambdaHandlerStreaming); err != nil {
+		if err := c.startStreaming(context.Background(), f.lambdaHandlerStreaming); err != nil {
 			log.Println(err)
 			return err
 		}

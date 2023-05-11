@@ -1,6 +1,7 @@
 package ridgenative
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -22,7 +23,7 @@ func TestRuntimeAPIClient_next(t *testing.T) {
 	address := strings.TrimPrefix(ts.URL, "http://")
 	client := newRuntimeAPIClient(address)
 
-	invoke, err := client.next()
+	invoke, err := client.next(context.Background())
 	if err != nil {
 		t.Fatal(err)
 	}
