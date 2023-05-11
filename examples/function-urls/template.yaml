@@ -10,4 +10,8 @@ Resources:
       Runtime: provided.al2
       Timeout: 3
       FunctionUrlConfig:
-         AuthType: NONE
+        AuthType: NONE
+        InvokeMode: RESPONSE_STREAM
+      Environment:
+        Variables:
+           RIDGENATIVE_INVOKE_MODE: RESPONSE_STREAM
