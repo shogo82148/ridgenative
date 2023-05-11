@@ -539,10 +539,10 @@ const (
 	// Invocation results are available when the payload is complete.
 	InvokeModeBuffered InvokeMode = "BUFFERED"
 
-	// InvokeModeResponseStreaming indicates that your function is invoked using
+	// InvokeModeResponseStream indicates that your function is invoked using
 	// the InvokeWithResponseStream API operation.
 	// It enables your function to stream payload results as they become available.
-	InvokeModeResponseStreaming InvokeMode = "RESPONSE_STREAMING"
+	InvokeModeResponseStream InvokeMode = "RESPONSE_STREAM"
 )
 
 // Start starts the AWS Lambda function.
@@ -560,7 +560,7 @@ func Start(mux http.Handler, mode InvokeMode) error {
 			log.Println(err)
 			return err
 		}
-	case InvokeModeResponseStreaming:
+	case InvokeModeResponseStream:
 		if err := c.startStreaming(f.lambdaHandlerStreaming); err != nil {
 			log.Println(err)
 			return err
@@ -605,8 +605,8 @@ func ListenAndServe(address string, mux http.Handler) error {
 	switch os.Getenv("RIDGENATIVE_INVOKE_MODE") {
 	case "BUFFERED", "":
 		mode = InvokeModeBuffered
-	case "RESPONSE_STREAMING":
-		mode = InvokeModeResponseStreaming
+	case "RESPONSE_STREAM":
+		mode = InvokeModeResponseStream
 	default:
 		return errors.New("ridgenative: invalid RIDGENATIVE_INVOKE_MODE")
 	}
