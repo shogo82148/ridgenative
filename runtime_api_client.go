@@ -17,12 +17,13 @@ import (
 )
 
 const (
-	headerAWSRequestID       = "Lambda-Runtime-Aws-Request-Id"
-	headerDeadlineMS         = "Lambda-Runtime-Deadline-Ms"
-	headerTraceID            = "Lambda-Runtime-Trace-Id"
-	headerCognitoIdentity    = "Lambda-Runtime-Cognito-Identity"
-	headerClientContext      = "Lambda-Runtime-Client-Context"
-	headerInvokedFunctionARN = "Lambda-Runtime-Invoked-Function-Arn"
+	headerAWSRequestID         = "Lambda-Runtime-Aws-Request-Id"
+	headerDeadlineMS           = "Lambda-Runtime-Deadline-Ms"
+	headerTraceID              = "Lambda-Runtime-Trace-Id"
+	headerCognitoIdentity      = "Lambda-Runtime-Cognito-Identity"
+	headerClientContext        = "Lambda-Runtime-Client-Context"
+	headerInvokedFunctionARN   = "Lambda-Runtime-Invoked-Function-Arn"
+	headerFunctionResponseMode = "Lambda-Runtime-Function-Response-Mode"
 
 	trailerLambdaErrorType = "Lambda-Runtime-Function-Error-Type"
 	trailerLambdaErrorBody = "Lambda-Runtime-Function-Error-Body"
@@ -250,6 +251,7 @@ func (c *runtimeAPIClient) postStreaming(ctx context.Context, path string, body 
 	req.Trailer = b.trailer
 	req.Header.Set("User-Agent", c.userAgent)
 	req.Header.Set("Content-Type", contentType)
+	req.Header.Set(headerFunctionResponseMode, "streaming")
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
