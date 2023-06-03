@@ -601,7 +601,7 @@ func ListenAndServe(address string, mux http.Handler) error {
 	}
 
 	// run on provided or provided.al2 runtime
-	mode := InvokeModeBuffered
+	var mode InvokeMode
 	switch os.Getenv("RIDGENATIVE_INVOKE_MODE") {
 	case "BUFFERED", "":
 		mode = InvokeModeBuffered
