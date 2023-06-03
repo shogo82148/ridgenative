@@ -110,7 +110,7 @@ func (c *runtimeAPIClient) handleInvoke(ctx context.Context, invoke *invoke, h h
 	if err != nil {
 		return c.reportFailure(ctx, invoke, lambdaErrorResponse(err))
 	}
-	ctx, cancel := context.WithDeadline(ctx, deadline)
+	child, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 
 	// set the trace id
@@ -118,10 +118,10 @@ func (c *runtimeAPIClient) handleInvoke(ctx context.Context, invoke *invoke, h h
 	os.Setenv("_X_AMZN_TRACE_ID", traceID)
 	// to keep compatibility with AWS Lambda X-Ray SDK, we need to set "x-amzn-trace-id" to the context.
 	// nolint:staticcheck
-	ctx = context.WithValue(ctx, "x-amzn-trace-id", traceID)
+	child = context.WithValue(child, "x-amzn-trace-id", traceID)
 
 	// call the handler, marshal any returned error
-	response, err := callBytesHandlerFunc(ctx, invoke.payload, h)
+	response, err := callBytesHandlerFunc(child, invoke.payload, h)
 	if err != nil {
 		invokeErr := lambdaErrorResponse(err)
 		if err := c.reportFailure(ctx, invoke, invokeErr); err != nil {
@@ -210,7 +210,7 @@ func (c *runtimeAPIClient) handleInvokeStreaming(ctx context.Context, invoke *in
 	if err != nil {
 		return c.reportFailure(ctx, invoke, lambdaErrorResponse(err))
 	}
-	ctx, cancel := context.WithDeadline(ctx, deadline)
+	child, cancel := context.WithDeadline(ctx, deadline)
 	defer cancel()
 
 	// set the trace id
@@ -218,10 +218,10 @@ func (c *runtimeAPIClient) handleInvokeStreaming(ctx context.Context, invoke *in
 	os.Setenv("_X_AMZN_TRACE_ID", traceID)
 	// to keep compatibility with AWS Lambda X-Ray SDK, we need to set "x-amzn-trace-id" to the context.
 	// nolint:staticcheck
-	ctx = context.WithValue(ctx, "x-amzn-trace-id", traceID)
+	child = context.WithValue(child, "x-amzn-trace-id", traceID)
 
 	// call the handler, marshal any returned error
-	response, err := callHandlerFuncSteaming(ctx, invoke.payload, h)
+	response, err := callHandlerFuncSteaming(child, invoke.payload, h)
 	if err != nil {
 		invokeErr := lambdaErrorResponse(err)
 		if err := c.reportFailure(ctx, invoke, invokeErr); err != nil {
