@@ -45,6 +45,9 @@ func TestRuntimeAPIClient_handleInvoke(t *testing.T) {
 			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/response" {
 				t.Errorf("unexpected path: %s", r.URL.Path)
 			}
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Error(err)
@@ -100,6 +103,9 @@ func TestRuntimeAPIClient_handleInvoke(t *testing.T) {
 			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/error" {
 				t.Errorf("unexpected path: %s", r.URL.Path)
 			}
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Error(err)
@@ -140,6 +146,10 @@ func TestRuntimeAPIClient_handleInvoke(t *testing.T) {
 			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/error" {
 				t.Errorf("unexpected path: %s", r.URL.Path)
 			}
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
+
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Error(err)
@@ -182,6 +192,10 @@ func TestRuntimeAPIClient_handleInvoke(t *testing.T) {
 			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/error" {
 				t.Errorf("unexpected path: %s", r.URL.Path)
 			}
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
+
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
 				t.Error(err)
@@ -223,6 +237,10 @@ func TestRuntimeAPIClient_handleInvoke(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+}
+
+func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
+
 }
 
 type myError struct {
