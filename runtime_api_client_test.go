@@ -240,7 +240,72 @@ func TestRuntimeAPIClient_handleInvoke(t *testing.T) {
 }
 
 func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
+	t.Run("succeeds", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/response" {
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+			if r.Header.Get("Content-Type") != "application/vnd.awslambda.http-integration-response" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
+			if r.Header.Get("Lambda-Runtime-Function-Response-Mode") != "streaming" {
+				t.Errorf("unexpected response mode: %s", r.Header.Get("Lambda-Runtime-Function-Response-Mode"))
+			}
 
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			if string(body) != `{"statusCode":200,"body":"{\"key\":\"value\"}"}` {
+				t.Errorf("unexpected body: %s", string(body))
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}))
+		defer ts.Close()
+
+		address := strings.TrimPrefix(ts.URL, "http://")
+		client := newRuntimeAPIClient(address)
+
+		invoke := &invoke{
+			id: "request-id",
+			headers: map[string][]string{
+				"Lambda-Runtime-Deadline-Ms": {
+					// the deadline is 100ms
+					encodeDeadline(time.Now().Add(100 * time.Millisecond)),
+				},
+				"Lambda-Runtime-Trace-Id": {"trace-id"},
+			},
+			payload: []byte(`{"httpMethod":"GET","path":"/"}`),
+		}
+		err := client.handleInvokeStreaming(context.Background(), invoke, func(ctx context.Context, req *request, w *io.PipeWriter) error {
+			traceID := ctx.Value("x-amzn-trace-id").(string)
+			if traceID != "trace-id" {
+				t.Errorf("want trace id is %s, got %s", "trace-id", traceID)
+			}
+			if req.HTTPMethod != "GET" {
+				t.Errorf("want method is %s, got %s", "GET", req.HTTPMethod)
+			}
+			if req.Path != "/" {
+				t.Errorf("want path is %s, got %s", "/", req.Path)
+			}
+
+			go func() {
+				if _, err := io.WriteString(w, `{"statusCode":200,"body":"{\"key\":\"value\"}"}`); err != nil {
+					t.Error(err)
+				}
+				if err := w.Close(); err != nil {
+					t.Error(err)
+				}
+			}()
+
+			return nil
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
 }
 
 type myError struct {
