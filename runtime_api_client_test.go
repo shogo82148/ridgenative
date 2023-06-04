@@ -70,13 +70,19 @@ func TestRuntimeAPIClient_handleInvoke(t *testing.T) {
 				},
 				"Lambda-Runtime-Trace-Id": {"trace-id"},
 			},
-			payload: []byte(`{}`),
+			payload: []byte(`{"httpMethod":"GET","path":"/"}`),
 		}
 		err := client.handleInvoke(context.Background(), invoke, func(ctx context.Context, req *request) (*response, error) {
 			// test trace id
 			traceID := ctx.Value("x-amzn-trace-id").(string)
 			if traceID != "trace-id" {
 				t.Errorf("want trace id is %s, got %s", "trace-id", traceID)
+			}
+			if req.HTTPMethod != "GET" {
+				t.Errorf("want method is %s, got %s", "GET", req.HTTPMethod)
+			}
+			if req.Path != "/" {
+				t.Errorf("want path is %s, got %s", "/", req.Path)
 			}
 
 			return &response{
