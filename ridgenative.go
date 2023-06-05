@@ -506,10 +506,10 @@ func (rw *streamingResponseWriter) Flush() {
 	rw.buf.Flush()
 }
 
-func (f *lambdaFunction) lambdaHandlerStreaming(ctx context.Context, req *request, w *io.PipeWriter) error {
+func (f *lambdaFunction) lambdaHandlerStreaming(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
 	r, err := f.httpRequestV2(ctx, req)
 	if err != nil {
-		return err
+		return "", err
 	}
 	go func() {
 		rw := newStreamingResponseWriter(w)
@@ -522,7 +522,7 @@ func (f *lambdaFunction) lambdaHandlerStreaming(ctx context.Context, req *reques
 		}()
 		f.mux.ServeHTTP(rw, r)
 	}()
-	return nil
+	return contentTypeHTTPIntegrationResponse, nil
 }
 
 func newLambdaFunction(mux http.Handler) *lambdaFunction {

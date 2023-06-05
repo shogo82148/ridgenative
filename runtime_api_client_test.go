@@ -279,7 +279,7 @@ func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
 			},
 			payload: []byte(`{"httpMethod":"GET","path":"/"}`),
 		}
-		err := client.handleInvokeStreaming(context.Background(), invoke, func(ctx context.Context, req *request, w *io.PipeWriter) error {
+		err := client.handleInvokeStreaming(context.Background(), invoke, func(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
 			traceID := ctx.Value("x-amzn-trace-id").(string)
 			if traceID != "trace-id" {
 				t.Errorf("want trace id is %s, got %s", "trace-id", traceID)
@@ -300,7 +300,7 @@ func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
 				}
 			}()
 
-			return nil
+			return "application/vnd.awslambda.http-integration-response", nil
 		})
 		if err != nil {
 			t.Fatal(err)

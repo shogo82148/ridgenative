@@ -189,7 +189,7 @@ func (c *runtimeAPIClient) reportFailure(ctx context.Context, invoke *invoke, in
 	return nil
 }
 
-type handlerFuncSteaming func(ctx context.Context, req *request, w *io.PipeWriter) error
+type handlerFuncSteaming func(ctx context.Context, req *request, w *io.PipeWriter) (contentType string, err error)
 
 func (c *runtimeAPIClient) startStreaming(ctx context.Context, h handlerFuncSteaming) error {
 	for {
@@ -221,7 +221,7 @@ func (c *runtimeAPIClient) handleInvokeStreaming(ctx context.Context, invoke *in
 	child = context.WithValue(child, "x-amzn-trace-id", traceID)
 
 	// call the handler, marshal any returned error
-	response, err := callHandlerFuncSteaming(child, invoke.payload, h)
+	response, contentType, err := callHandlerFuncSteaming(child, invoke.payload, h)
 	if err != nil {
 		invokeErr := lambdaErrorResponse(err)
 		if err := c.reportFailure(ctx, invoke, invokeErr); err != nil {
@@ -233,7 +233,7 @@ func (c *runtimeAPIClient) handleInvokeStreaming(ctx context.Context, invoke *in
 		return nil
 	}
 
-	if err := c.postStreaming(ctx, invoke.id+"/response", response, contentTypeHTTPIntegrationResponse); err != nil {
+	if err := c.postStreaming(ctx, invoke.id+"/response", response, contentType); err != nil {
 		return fmt.Errorf("unexpected error occurred when sending the function functionResponse to the API: %w", err)
 	}
 

@@ -31,7 +31,7 @@ func callBytesHandlerFunc(ctx context.Context, payload []byte, h handlerFunc) (r
 	return json.Marshal(resp)
 }
 
-func callHandlerFuncSteaming(ctx context.Context, payload []byte, h handlerFuncSteaming) (response io.ReadCloser, err error) {
+func callHandlerFuncSteaming(ctx context.Context, payload []byte, h handlerFuncSteaming) (response io.ReadCloser, contentType string, err error) {
 	defer func() {
 		if v := recover(); v != nil {
 			err = lambdaPanicResponse(v)
@@ -40,12 +40,13 @@ func callHandlerFuncSteaming(ctx context.Context, payload []byte, h handlerFuncS
 
 	var req *request
 	if err := json.Unmarshal(payload, &req); err != nil {
-		return nil, err
+		return nil, "", err
 	}
 
 	r, w := io.Pipe()
-	if err := h(ctx, req, w); err != nil {
-		return nil, err
+	contentType, err = h(ctx, req, w)
+	if err != nil {
+		return nil, "", err
 	}
-	return r, nil
+	return r, contentType, nil
 }
