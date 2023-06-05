@@ -20,7 +20,9 @@ func TestRuntimeAPIClient_next(t *testing.T) {
 		w.Header().Set("Content-Type", "application/json")
 		w.Header().Set(headerAWSRequestID, "request-id")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"key":"value"}`))
+		if _, err := w.Write([]byte(`{"key":"value"}`)); err != nil {
+			t.Error(err)
+		}
 	}))
 	defer ts.Close()
 
