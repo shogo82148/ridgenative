@@ -308,6 +308,147 @@ func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
 			t.Fatal(err)
 		}
 	})
+
+	t.Run("error", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/error" {
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			if string(body) != `{"errorMessage":"some errors","errorType":"myError"}` {
+				t.Errorf("unexpected body: %s", string(body))
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}))
+		defer ts.Close()
+
+		address := strings.TrimPrefix(ts.URL, "http://")
+		client := newRuntimeAPIClient(address)
+
+		invoke := &invoke{
+			id: "request-id",
+			headers: map[string][]string{
+				"Lambda-Runtime-Deadline-Ms": {
+					// the deadline is 100ms
+					encodeDeadline(time.Now().Add(100 * time.Millisecond)),
+				},
+				"Lambda-Runtime-Trace-Id": {"trace-id"},
+			},
+			payload: []byte(`{"httpMethod":"GET","path":"/"}`),
+		}
+		err := client.handleInvokeStreaming(context.Background(), invoke, func(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
+			return "", &myError{"some errors"}
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("panic", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/error" {
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
+
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+
+			// ignore stack traces because it has line numbers and it is not stable.
+			if !strings.HasPrefix(string(body), `{"errorMessage":"some errors","errorType":"string","stackTrace":`) {
+				t.Errorf("unexpected body: %s", string(body))
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}))
+		defer ts.Close()
+
+		address := strings.TrimPrefix(ts.URL, "http://")
+		client := newRuntimeAPIClient(address)
+
+		invoke := &invoke{
+			id: "request-id",
+			headers: map[string][]string{
+				"Lambda-Runtime-Deadline-Ms": {
+					// the deadline is 100ms
+					encodeDeadline(time.Now().Add(100 * time.Millisecond)),
+				},
+				"Lambda-Runtime-Trace-Id": {"trace-id"},
+			},
+			payload: []byte(`{"httpMethod":"GET","path":"/"}`),
+		}
+		err := client.handleInvokeStreaming(context.Background(), invoke, func(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
+			panic("some errors")
+		})
+		if err == nil {
+			t.Error("want error, but got nil")
+		}
+	})
+
+	t.Run("context deadline exceeded", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/error" {
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+			if r.Header.Get("Content-Type") != "application/json" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			if string(body) != `{"errorMessage":"some errors","errorType":"myError"}` {
+				t.Errorf("unexpected body: %s", string(body))
+			}
+			w.WriteHeader(http.StatusAccepted)
+		}))
+		defer ts.Close()
+
+		address := strings.TrimPrefix(ts.URL, "http://")
+		client := newRuntimeAPIClient(address)
+
+		invoke := &invoke{
+			id: "request-id",
+			headers: map[string][]string{
+				"Lambda-Runtime-Deadline-Ms": {
+					// the deadline is 100ms
+					encodeDeadline(time.Now().Add(100 * time.Millisecond)),
+				},
+				"Lambda-Runtime-Trace-Id": {"trace-id"},
+			},
+			payload: []byte(`{"httpMethod":"GET","path":"/"}`),
+		}
+		err := client.handleInvokeStreaming(context.Background(), invoke, func(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
+			select {
+			// the handle takes a long time, so the deadline is exceeded.
+			case <-time.After(time.Second):
+				t.Error("deadline is too long")
+				return "", errors.New("timeout")
+
+			case <-ctx.Done():
+				return "", &myError{"context deadline exceeded"}
+			}
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
 }
 
 type myError struct {
