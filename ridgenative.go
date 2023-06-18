@@ -474,7 +474,7 @@ func (rw *streamingResponseWriter) Write(data []byte) (int, error) {
 		// TODO: detect content type if it is not set.
 		rw.WriteHeader(http.StatusOK)
 	}
-	return rw.w.Write(data)
+	return rw.buf.Write(data)
 }
 
 func (rw *streamingResponseWriter) closeWithError(err error) error {

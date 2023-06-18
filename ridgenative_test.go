@@ -786,4 +786,59 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 			t.Errorf("unexpected body: want %q, got %q", want, got)
 		}
 	})
+
+	t.Run("WriteHeader", func(t *testing.T) {
+		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+
+			// Writes to ResponseWriter are buffered,
+			// so multiple writes to ResponseWriter become a single write to the pipe
+			io.WriteString(w, `{"hello":`)
+			io.WriteString(w, `"world"}`)
+		}))
+		r, w := io.Pipe()
+		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			RequestContext: requestContext{
+				HTTP: &requestContextHTTP{
+					Path: "/",
+				},
+			},
+		}, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := contentType, "application/vnd.awslambda.http-integration-response"; got != want {
+			t.Errorf("unexpected content type: want %q, got %q", want, got)
+		}
+
+		// Reads and Writes on the pipe are matched one to one,
+		// so we get only the header on first read.
+		buf := make([]byte, 1024)
+		n, err := r.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(buf[:n]), "{\"statusCode\":200}\x00\x00\x00\x00\x00\x00\x00\x00"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+
+		// The second read gets the body.
+		n, err = r.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(buf[:n]), "{\"hello\":\"world\"}"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+
+		// The third read gets EOF.
+		n, err = r.Read(buf)
+		if err != io.EOF {
+			t.Errorf("unexpected error: want %v, got %v", io.EOF, err)
+		}
+		if n != 0 {
+			t.Errorf("unexpected read size: want %d, got %d", 0, n)
+		}
+	})
 }
