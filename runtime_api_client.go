@@ -294,9 +294,8 @@ func (r *errorCapturingReader) Read(p []byte) (int, error) {
 	}
 
 	n, err := r.reader.Read(p)
-	if err != nil && errors.Is(err, io.EOF) {
+	if err != nil && !errors.Is(err, io.EOF) {
 		// capture the error
-		r.err = err
 		lambdaErr := lambdaErrorResponse(err)
 		body, err := json.Marshal(lambdaErr)
 		if err != nil {
@@ -306,10 +305,15 @@ func (r *errorCapturingReader) Read(p []byte) (int, error) {
 		}
 		r.trailer.Set(trailerLambdaErrorType, lambdaErr.Type)
 		r.trailer.Set(trailerLambdaErrorBody, base64.StdEncoding.EncodeToString(body))
+		r.err = io.EOF
+		return n, io.EOF
 	}
 	return n, err
 }
 
 func (r *errorCapturingReader) Close() error {
+	if r.reader == nil {
+		return nil
+	}
 	return r.reader.Close()
 }

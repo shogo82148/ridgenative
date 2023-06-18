@@ -2,6 +2,7 @@ package ridgenative
 
 import (
 	"context"
+	"encoding/base64"
 	"errors"
 	"io"
 	"net/http"
@@ -263,6 +264,12 @@ func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
 			if string(body) != `{"statusCode":200,"body":"{\"key\":\"value\"}"}` {
 				t.Errorf("unexpected body: %s", string(body))
 			}
+			if len(r.Trailer.Values("Lambda-Runtime-Function-Error-Type")) != 0 {
+				t.Errorf("unexpected error type: %s", r.Trailer.Values("Lambda-Runtime-Function-Error-Type"))
+			}
+			if len(r.Trailer.Values("Lambda-Runtime-Function-Error-Body")) != 0 {
+				t.Errorf("unexpected error body: %s", r.Trailer.Values("Lambda-Runtime-Function-Error-Body"))
+			}
 			w.WriteHeader(http.StatusAccepted)
 		}))
 		defer ts.Close()
@@ -309,7 +316,7 @@ func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
 		}
 	})
 
-	t.Run("error", func(t *testing.T) {
+	t.Run("error before start streaming", func(t *testing.T) {
 		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/error" {
 				t.Errorf("unexpected path: %s", r.URL.Path)
@@ -346,6 +353,64 @@ func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
 		}
 		err := client.handleInvokeStreaming(context.Background(), invoke, func(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
 			return "", &myError{"some errors"}
+		})
+		if err != nil {
+			t.Fatal(err)
+		}
+	})
+
+	t.Run("error during streaming", func(t *testing.T) {
+		ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if r.URL.Path != "/2018-06-01/runtime/invocation/request-id/response" {
+				t.Errorf("unexpected path: %s", r.URL.Path)
+			}
+			if r.Header.Get("Content-Type") != "application/vnd.awslambda.http-integration-response" {
+				t.Errorf("unexpected content type: %s", r.Header.Get("Content-Type"))
+			}
+			body, err := io.ReadAll(r.Body)
+			if err != nil {
+				t.Error(err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			if string(body) != "" {
+				t.Errorf("unexpected body: %s", string(body))
+			}
+
+			if r.Trailer.Get("Lambda-Runtime-Function-Error-Type") != "myError" {
+				t.Errorf("unexpected error type: %s", r.Trailer.Get("Lambda-Runtime-Function-Error-Type"))
+			}
+			wantErr := base64.StdEncoding.EncodeToString([]byte(`{"errorMessage":"some errors","errorType":"myError"}`))
+			if r.Trailer.Get("Lambda-Runtime-Function-Error-Body") != wantErr {
+				t.Errorf("unexpected error: %s", r.Trailer.Get("Lambda-Runtime-Function-Error-Body"))
+			}
+
+			w.WriteHeader(http.StatusAccepted)
+		}))
+		defer ts.Close()
+
+		address := strings.TrimPrefix(ts.URL, "http://")
+		client := newRuntimeAPIClient(address)
+
+		invoke := &invoke{
+			id: "request-id",
+			headers: map[string][]string{
+				"Lambda-Runtime-Deadline-Ms": {
+					// the deadline is 100ms
+					encodeDeadline(time.Now().Add(100 * time.Millisecond)),
+				},
+				"Lambda-Runtime-Trace-Id": {"trace-id"},
+			},
+			payload: []byte(`{"httpMethod":"GET","path":"/"}`),
+		}
+		err := client.handleInvokeStreaming(context.Background(), invoke, func(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
+			go func() {
+				if err := w.CloseWithError(&myError{"some errors"}); err != nil {
+					t.Error(err)
+				}
+			}()
+
+			return "application/vnd.awslambda.http-integration-response", nil
 		})
 		if err != nil {
 			t.Fatal(err)
@@ -412,7 +477,7 @@ func TestRuntimeAPIClient_handleInvokeStreaming(t *testing.T) {
 				w.WriteHeader(http.StatusInternalServerError)
 				return
 			}
-			if string(body) != `{"errorMessage":"some errors","errorType":"myError"}` {
+			if string(body) != `{"errorMessage":"context deadline exceeded","errorType":"myError"}` {
 				t.Errorf("unexpected body: %s", string(body))
 			}
 			w.WriteHeader(http.StatusAccepted)
