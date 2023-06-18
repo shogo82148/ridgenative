@@ -757,3 +757,33 @@ func BenchmarkResponse_text(b *testing.B) {
 		rw.lambdaResponseV1()
 	}
 }
+
+func TestLambdaHandlerStreaming(t *testing.T) {
+	t.Run("normal", func(t *testing.T) {
+		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"hello":"world"}`)
+		}))
+		r, w := io.Pipe()
+		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			RequestContext: requestContext{
+				HTTP: &requestContextHTTP{
+					Path: "/",
+				},
+			},
+		}, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := contentType, "application/vnd.awslambda.http-integration-response"; got != want {
+			t.Errorf("unexpected content type: want %q, got %q", want, got)
+		}
+		data, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(data), "{\"statusCode\":200}\x00\x00\x00\x00\x00\x00\x00\x00{\"hello\":\"world\"}"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+	})
+}
