@@ -434,13 +434,19 @@ type streamingResponseWriter struct {
 	wroteHeader bool
 	header      http.Header
 	statusCode  int
+	err         error
+
+	// prelude is the first part of the body.
+	// it is used for detecting content-type.
+	prelude []byte
 }
 
 func newStreamingResponseWriter(w *io.PipeWriter) *streamingResponseWriter {
 	return &streamingResponseWriter{
-		w:      w,
-		buf:    bufio.NewWriter(w),
-		header: make(http.Header, 1),
+		w:       w,
+		buf:     bufio.NewWriter(w),
+		header:  make(http.Header, 1),
+		prelude: make([]byte, 0, 512),
 	}
 }
 
@@ -454,49 +460,102 @@ func (rw *streamingResponseWriter) WriteHeader(code int) {
 		log.Printf("ridgenative: superfluous response.WriteHeader call from %s (%s:%d)", caller.Function, path.Base(caller.File), caller.Line)
 		return
 	}
-	rw.statusCode = code
-	r := &streamingResponse{
-		StatusCode: code,
-	}
-	data, err := json.Marshal(r)
-	if err != nil {
-		log.Printf("ridgenative: %v", err)
+	if rw.err != nil {
 		return
 	}
-	rw.buf.Write(data)
-	rw.buf.WriteString("\x00\x00\x00\x00\x00\x00\x00\x00")
-	rw.buf.Flush()
+
+	if !rw.hasContentType() {
+		rw.header.Set("Content-Type", http.DetectContentType(rw.prelude))
+	}
+
 	rw.wroteHeader = true
+	rw.statusCode = code
+
+	// build the prelude
+	h := make(map[string]string, len(rw.header))
+	for key, value := range rw.header {
+		if key == "Set-Cookie" {
+			continue
+		}
+		h[key] = strings.Join(value, ", ")
+	}
+	cookies := rw.header.Values("Set-Cookie")
+	r := &streamingResponse{
+		StatusCode: code,
+		Headers:    h,
+		Cookies:    cookies,
+	}
+
+	data, err := json.Marshal(r)
+	if err != nil {
+		rw.err = fmt.Errorf("ridgenative: failed to marshal response: %w", err)
+		return
+	}
+	if _, err := rw.buf.Write(data); err != nil {
+		rw.err = err
+		return
+	}
+	if _, err := rw.buf.WriteString("\x00\x00\x00\x00\x00\x00\x00\x00"); err != nil {
+		rw.err = err
+		return
+	}
+	if len(rw.prelude) != 0 {
+		if _, err := rw.buf.Write(rw.prelude); err != nil {
+			rw.err = err
+			return
+		}
+	}
+	if err := rw.buf.Flush(); err != nil {
+		rw.err = err
+	}
+}
+
+func (rw *streamingResponseWriter) hasContentType() bool {
+	return rw.header.Get("Content-Type") != ""
 }
 
 func (rw *streamingResponseWriter) Write(data []byte) (int, error) {
+	var m int
 	if !rw.wroteHeader {
-		// TODO: detect content type if it is not set.
-		rw.WriteHeader(http.StatusOK)
+		if rw.hasContentType() {
+			rw.WriteHeader(http.StatusOK)
+		} else {
+			// save the first part of the body for detecting content-type.
+			data0 := data
+			if len(rw.prelude)+len(data0) > cap(rw.prelude) {
+				data0 = data0[:cap(rw.prelude)-len(rw.prelude)]
+			}
+			rw.prelude = append(rw.prelude, data0...)
+
+			if len(rw.prelude) == cap(rw.prelude) {
+				rw.WriteHeader(http.StatusOK)
+			}
+			m = len(data0)
+			data = data[m:]
+			if len(data) == 0 {
+				return m, nil
+			}
+		}
 	}
-	return rw.buf.Write(data)
+	n, err := rw.buf.Write(data)
+	return n + m, err
 }
 
 func (rw *streamingResponseWriter) closeWithError(err error) error {
 	if !rw.wroteHeader {
 		rw.WriteHeader(http.StatusOK)
 	}
-	err0 := rw.buf.Flush()
-	if err1 := rw.w.CloseWithError(err); err0 == nil {
-		err0 = err1
+	if rw.err != nil {
+		err = rw.err
 	}
-	return err0
+	if err0 := rw.buf.Flush(); err0 != nil {
+		err = err0
+	}
+	return rw.w.CloseWithError(err)
 }
 
 func (rw *streamingResponseWriter) close() error {
-	if !rw.wroteHeader {
-		rw.WriteHeader(http.StatusOK)
-	}
-	err0 := rw.buf.Flush()
-	if err1 := rw.w.Close(); err0 == nil {
-		err0 = err1
-	}
-	return err0
+	return rw.closeWithError(nil)
 }
 
 func (rw *streamingResponseWriter) Flush() {
