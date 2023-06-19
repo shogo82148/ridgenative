@@ -1,10 +1,13 @@
 package ridgenative
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"net/http"
@@ -18,12 +21,6 @@ import (
 
 type lambdaFunction struct {
 	mux http.Handler
-	// buffer for string data
-	builder strings.Builder
-
-	// buffer for binary data
-	buffer bytes.Buffer
-	out    []byte
 }
 
 type request struct {
@@ -207,43 +204,34 @@ func (f *lambdaFunction) httpRequestV2(ctx context.Context, r *request) (*http.R
 }
 
 func (f *lambdaFunction) decodeBody(r *request) (body io.ReadCloser, contentLength int64, err error) {
-	if r.Body != "" {
-		var reader io.Reader
-		if r.IsBase64Encoded {
-			f.buffer.Reset()
-			f.buffer.WriteString(r.Body)
-			n := base64.StdEncoding.DecodedLen(len(r.Body))
-			out := f.out
-			if cap(out) < n {
-				out = make([]byte, n)
-			} else {
-				out = out[:n]
-			}
-			n, err := base64.StdEncoding.Decode(out, f.buffer.Bytes())
-			f.out = out
-			if err != nil {
-				return nil, 0, err
-			}
-			contentLength = int64(n)
-			reader = bytes.NewReader(out[:n])
-		} else {
-			contentLength = int64(len(r.Body))
-			reader = io.Reader(strings.NewReader(r.Body))
-		}
-		body = io.NopCloser(reader)
-	} else {
+	if r.Body == "" {
 		body = http.NoBody
+		return
 	}
+
+	var reader io.Reader
+	if r.IsBase64Encoded {
+		var b []byte
+		b, err = base64.StdEncoding.DecodeString(r.Body)
+		if err != nil {
+			return
+		}
+		contentLength = int64(len(b))
+		reader = bytes.NewReader(b)
+	} else {
+		contentLength = int64(len(r.Body))
+		reader = strings.NewReader(r.Body)
+	}
+	body = io.NopCloser(reader)
 	return
 }
 
 type responseWriter struct {
-	w           io.Writer
+	w           bytes.Buffer
 	isBinary    bool
 	wroteHeader bool
 	header      http.Header
 	statusCode  int
-	lambda      *lambdaFunction
 }
 
 type response struct {
@@ -255,12 +243,9 @@ type response struct {
 	Cookies           []string            `json:"cookies,omitempty"`
 }
 
-func (f *lambdaFunction) newResponseWriter() *responseWriter {
-	f.builder.Reset()
-	f.buffer.Reset()
+func newResponseWriter() *responseWriter {
 	return &responseWriter{
 		header: make(http.Header, 1),
-		lambda: f,
 	}
 }
 
@@ -295,33 +280,10 @@ func (rw *responseWriter) WriteHeader(code int) {
 	}
 	rw.statusCode = code
 	rw.wroteHeader = true
-	if typ := rw.header.Get("Content-Type"); typ != "" {
-		rw.isBinary = isBinary(typ)
-		if rw.isBinary {
-			rw.w = &rw.lambda.buffer
-		} else {
-			rw.w = &rw.lambda.builder
-		}
-	}
 }
 
 func (rw *responseWriter) Write(data []byte) (int, error) {
-	if !rw.wroteHeader {
-		rw.WriteHeader(http.StatusOK)
-	}
-	if rw.w != nil {
-		return rw.w.Write(data)
-	}
-
-	f := rw.lambda
-	rest := 512 - f.buffer.Len()
-	if len(data) < rest {
-		return f.buffer.Write(data)
-	}
-	n1, _ := f.buffer.Write(data[:rest])
-	rw.detectContentType()
-	n2, _ := rw.w.Write(data[rest:])
-	return n1 + n2, nil
+	return rw.w.Write(data)
 }
 
 func (rw *responseWriter) lambdaResponseV1() (*response, error) {
@@ -377,38 +339,24 @@ func (rw *responseWriter) encodeBody() string {
 	if !rw.wroteHeader {
 		rw.WriteHeader(http.StatusOK)
 	}
-	if rw.w == nil {
+
+	if typ := rw.header.Get("Content-Type"); typ != "" {
+		rw.isBinary = isBinary(typ)
+	} else {
 		rw.detectContentType()
 	}
 
-	var body string
 	if rw.isBinary {
-		out := rw.lambda.out
-		l := base64.StdEncoding.EncodedLen(rw.lambda.buffer.Len())
-		if cap(out) < l {
-			out = make([]byte, l)
-		} else {
-			out = out[:l]
-		}
-		base64.StdEncoding.Encode(out, rw.lambda.buffer.Bytes())
-		body = string(out)
-		rw.lambda.out = out
+		return base64.StdEncoding.EncodeToString(rw.w.Bytes())
 	} else {
-		body = rw.lambda.builder.String()
+		return rw.w.String()
 	}
-	return body
 }
 
 func (rw *responseWriter) detectContentType() {
-	contentType := http.DetectContentType(rw.lambda.buffer.Bytes())
+	contentType := http.DetectContentType(rw.w.Bytes())
 	rw.header.Set("Content-Type", contentType)
 	rw.isBinary = isBinary(contentType)
-	if rw.isBinary {
-		rw.w = &rw.lambda.buffer
-	} else {
-		rw.w = &rw.lambda.builder
-		rw.lambda.buffer.WriteTo(rw.w)
-	}
 }
 
 // assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml as text
@@ -456,27 +404,230 @@ func (f *lambdaFunction) lambdaHandler(ctx context.Context, req *request) (*resp
 		// Lambda Function URLs or API Gateway v2
 		r, err := f.httpRequestV2(ctx, req)
 		if err != nil {
-			return &response{}, err
+			return nil, err
 		}
-		rw := f.newResponseWriter()
+		rw := newResponseWriter()
 		f.mux.ServeHTTP(rw, r)
 		return rw.lambdaResponseV2()
 	} else {
 		// API Gateway v1 or ALB
 		r, err := f.httpRequestV1(ctx, req)
 		if err != nil {
-			return &response{}, err
+			return nil, err
 		}
-		rw := f.newResponseWriter()
+		rw := newResponseWriter()
 		f.mux.ServeHTTP(rw, r)
 		return rw.lambdaResponseV1()
 	}
+}
+
+type streamingResponse struct {
+	StatusCode int               `json:"statusCode"`
+	Headers    map[string]string `json:"headers,omitempty"`
+	Cookies    []string          `json:"cookies,omitempty"`
+}
+
+// streamingResponseWriter is a http.ResponseWriter that supports streaming.
+type streamingResponseWriter struct {
+	w           *io.PipeWriter
+	buf         *bufio.Writer
+	wroteHeader bool
+	header      http.Header
+	statusCode  int
+	err         error
+
+	// prelude is the first part of the body.
+	// it is used for detecting content-type.
+	prelude []byte
+}
+
+func newStreamingResponseWriter(w *io.PipeWriter) *streamingResponseWriter {
+	return &streamingResponseWriter{
+		w:       w,
+		buf:     bufio.NewWriter(w),
+		header:  make(http.Header, 1),
+		prelude: make([]byte, 0, 512),
+	}
+}
+
+func (rw *streamingResponseWriter) Header() http.Header {
+	return rw.header
+}
+
+func (rw *streamingResponseWriter) WriteHeader(code int) {
+	if rw.wroteHeader {
+		caller := relevantCaller()
+		log.Printf("ridgenative: superfluous response.WriteHeader call from %s (%s:%d)", caller.Function, path.Base(caller.File), caller.Line)
+		return
+	}
+	if rw.err != nil {
+		return
+	}
+
+	if !rw.hasContentType() {
+		rw.header.Set("Content-Type", http.DetectContentType(rw.prelude))
+	}
+
+	rw.wroteHeader = true
+	rw.statusCode = code
+
+	// build the prelude
+	h := make(map[string]string, len(rw.header))
+	for key, value := range rw.header {
+		if key == "Set-Cookie" {
+			continue
+		}
+		h[key] = strings.Join(value, ", ")
+	}
+	cookies := rw.header.Values("Set-Cookie")
+	r := &streamingResponse{
+		StatusCode: code,
+		Headers:    h,
+		Cookies:    cookies,
+	}
+
+	data, err := json.Marshal(r)
+	if err != nil {
+		rw.err = fmt.Errorf("ridgenative: failed to marshal response: %w", err)
+		return
+	}
+	if _, err := rw.buf.Write(data); err != nil {
+		rw.err = err
+		return
+	}
+	if _, err := rw.buf.WriteString("\x00\x00\x00\x00\x00\x00\x00\x00"); err != nil {
+		rw.err = err
+		return
+	}
+	if len(rw.prelude) != 0 {
+		if _, err := rw.buf.Write(rw.prelude); err != nil {
+			rw.err = err
+			return
+		}
+	}
+	if err := rw.buf.Flush(); err != nil {
+		rw.err = err
+	}
+}
+
+func (rw *streamingResponseWriter) hasContentType() bool {
+	return rw.header.Get("Content-Type") != ""
+}
+
+func (rw *streamingResponseWriter) Write(data []byte) (int, error) {
+	var m int
+	if !rw.wroteHeader {
+		if rw.hasContentType() {
+			rw.WriteHeader(http.StatusOK)
+		} else {
+			// save the first part of the body for detecting content-type.
+			data0 := data
+			if len(rw.prelude)+len(data0) > cap(rw.prelude) {
+				data0 = data0[:cap(rw.prelude)-len(rw.prelude)]
+			}
+			rw.prelude = append(rw.prelude, data0...)
+
+			if len(rw.prelude) == cap(rw.prelude) {
+				rw.WriteHeader(http.StatusOK)
+			}
+			m = len(data0)
+			data = data[m:]
+			if len(data) == 0 {
+				return m, nil
+			}
+		}
+	}
+	n, err := rw.buf.Write(data)
+	return n + m, err
+}
+
+func (rw *streamingResponseWriter) closeWithError(err error) error {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
+	if rw.err != nil {
+		err = rw.err
+	}
+	if err0 := rw.buf.Flush(); err0 != nil {
+		err = err0
+	}
+	return rw.w.CloseWithError(err)
+}
+
+func (rw *streamingResponseWriter) close() error {
+	return rw.closeWithError(nil)
+}
+
+func (rw *streamingResponseWriter) Flush() {
+	if !rw.wroteHeader {
+		rw.WriteHeader(http.StatusOK)
+	}
+	rw.buf.Flush()
+}
+
+func (f *lambdaFunction) lambdaHandlerStreaming(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
+	r, err := f.httpRequestV2(ctx, req)
+	if err != nil {
+		return "", err
+	}
+	go func() {
+		rw := newStreamingResponseWriter(w)
+		defer func() {
+			if v := recover(); v != nil {
+				_ = rw.closeWithError(lambdaPanicResponse(v))
+			} else {
+				_ = rw.close()
+			}
+		}()
+		f.mux.ServeHTTP(rw, r)
+	}()
+	return contentTypeHTTPIntegrationResponse, nil
 }
 
 func newLambdaFunction(mux http.Handler) *lambdaFunction {
 	return &lambdaFunction{
 		mux: mux,
 	}
+}
+
+// InvokeMode is the mode that determines which API operation Lambda uses.
+type InvokeMode string
+
+const (
+	// InvokeModeBuffered indicates that your function is invoked using the Invoke API operation.
+	// Invocation results are available when the payload is complete.
+	InvokeModeBuffered InvokeMode = "BUFFERED"
+
+	// InvokeModeResponseStream indicates that your function is invoked using
+	// the InvokeWithResponseStream API operation.
+	// It enables your function to stream payload results as they become available.
+	InvokeModeResponseStream InvokeMode = "RESPONSE_STREAM"
+)
+
+// Start starts the AWS Lambda function.
+// The handler is typically nil, in which case the DefaultServeMux is used.
+func Start(mux http.Handler, mode InvokeMode) error {
+	api := os.Getenv("AWS_LAMBDA_RUNTIME_API")
+	if mux == nil {
+		mux = http.DefaultServeMux
+	}
+	f := newLambdaFunction(mux)
+	c := newRuntimeAPIClient(api)
+	switch mode {
+	case InvokeModeBuffered:
+		if err := c.start(context.Background(), f.lambdaHandler); err != nil {
+			log.Println(err)
+			return err
+		}
+	case InvokeModeResponseStream:
+		if err := c.startStreaming(context.Background(), f.lambdaHandlerStreaming); err != nil {
+			log.Println(err)
+			return err
+		}
+	default:
+		return fmt.Errorf("ridgenative: invalid InvokeMode: %s", mode)
+	}
+	return nil
 }
 
 // ListenAndServe starts HTTP server.
@@ -489,29 +640,34 @@ func newLambdaFunction(mux http.Handler) *lambdaFunction {
 //
 // https://docs.aws.amazon.com/elasticloadbalancing/latest/application/lambda-functions.html
 //
-// If AWS_EXECUTION_ENV is AWS_Lambda_go1.x, it returns an error.
+// If AWS_EXECUTION_ENV environment value is AWS_Lambda_go1.x, it returns an error.
 // If AWS_LAMBDA_RUNTIME_API environment value is NOT defined, it just calls http.ListenAndServe.
 //
 // The handler is typically nil, in which case the DefaultServeMux is used.
+//
+// If AWS_LAMBDA_RUNTIME_API environment value is defined, ListenAndServe uses it as the invoke mode.
+// The default is InvokeModeBuffered.
 func ListenAndServe(address string, mux http.Handler) error {
 	if go1 := os.Getenv("AWS_EXECUTION_ENV"); go1 == "AWS_Lambda_go1.x" {
 		// run on go1.x runtime
 		return errors.New("ridgenative: go1.x runtime is not supported")
 	}
 
-	api := os.Getenv("AWS_LAMBDA_RUNTIME_API") // run on provided or provided.al2 runtime
+	api := os.Getenv("AWS_LAMBDA_RUNTIME_API")
 	if api == "" {
 		// fall back to normal HTTP server.
 		return http.ListenAndServe(address, mux)
 	}
-	if mux == nil {
-		mux = http.DefaultServeMux
+
+	// run on provided or provided.al2 runtime
+	var mode InvokeMode
+	switch os.Getenv("RIDGENATIVE_INVOKE_MODE") {
+	case "BUFFERED", "":
+		mode = InvokeModeBuffered
+	case "RESPONSE_STREAM":
+		mode = InvokeModeResponseStream
+	default:
+		return errors.New("ridgenative: invalid RIDGENATIVE_INVOKE_MODE")
 	}
-	f := newLambdaFunction(mux)
-	c := newRuntimeAPIClient(api)
-	if err := c.start(f.lambdaHandler); err != nil {
-		log.Println(err)
-		return err
-	}
-	return nil
+	return Start(mux, mode)
 }

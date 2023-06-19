@@ -402,9 +402,8 @@ func TestHTTPRequest(t *testing.T) {
 }
 
 func TestResponseV1(t *testing.T) {
-	l := &lambdaFunction{}
 	t.Run("normal", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		// normal header fields
 		rw.Header().Add("foo", "foo")
 
@@ -459,7 +458,7 @@ func TestResponseV1(t *testing.T) {
 		}
 	})
 	t.Run("set content-type", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
 			t.Error(err)
@@ -489,7 +488,7 @@ func TestResponseV1(t *testing.T) {
 		}
 	})
 	t.Run("redirect to example.com", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Header().Add("location", "http://example.com/")
 		rw.WriteHeader(http.StatusFound)
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
@@ -517,7 +516,7 @@ func TestResponseV1(t *testing.T) {
 		}
 	})
 	t.Run("base64", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		// 1x1 PNG image
 		if _, err := io.WriteString(rw, "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52"); err != nil {
 			t.Error(err)
@@ -552,9 +551,8 @@ func TestResponseV1(t *testing.T) {
 }
 
 func TestResponseV2(t *testing.T) {
-	l := &lambdaFunction{}
 	t.Run("normal", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 
 		// normal header fields
 		rw.Header().Add("foo", "foo")
@@ -609,7 +607,7 @@ func TestResponseV2(t *testing.T) {
 		}
 	})
 	t.Run("set content-type", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
 			t.Error(err)
@@ -639,7 +637,7 @@ func TestResponseV2(t *testing.T) {
 		}
 	})
 	t.Run("redirect to example.com", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Header().Add("location", "http://example.com/")
 		rw.WriteHeader(http.StatusFound)
 		if _, err := io.WriteString(rw, "<!DOCTYPE html>\n"); err != nil {
@@ -667,7 +665,7 @@ func TestResponseV2(t *testing.T) {
 		}
 	})
 	t.Run("base64", func(t *testing.T) {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		// 1x1 PNG image
 		if _, err := io.WriteString(rw, "\x89\x50\x4e\x47\x0d\x0a\x1a\x0a\x00\x00\x00\x0d\x49\x48\x44\x52"); err != nil {
 			t.Error(err)
@@ -738,26 +736,216 @@ func BenchmarkRequest_text(b *testing.B) {
 }
 
 func BenchmarkResponse_binary(b *testing.B) {
-	l := newLambdaFunction(nil)
 	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Write(data)
 		rw.lambdaResponseV1()
 	}
 }
 
 func BenchmarkResponse_text(b *testing.B) {
-	l := newLambdaFunction(nil)
 	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
 	for i := 0; i < len(data); i++ {
 		data[i] = 'a'
 	}
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		rw := l.newResponseWriter()
+		rw := newResponseWriter()
 		rw.Write(data)
 		rw.lambdaResponseV1()
 	}
+}
+
+func TestLambdaHandlerStreaming(t *testing.T) {
+	t.Run("normal", func(t *testing.T) {
+		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			if _, err := io.WriteString(w, `{"hello":"world"}`); err != nil {
+				t.Error(err)
+			}
+		}))
+		r, w := io.Pipe()
+		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			RequestContext: requestContext{
+				HTTP: &requestContextHTTP{
+					Path: "/",
+				},
+			},
+		}, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := contentType, "application/vnd.awslambda.http-integration-response"; got != want {
+			t.Errorf("unexpected content type: want %q, got %q", want, got)
+		}
+		data, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(data), "{\"statusCode\":200,\"headers\":{\"Content-Type\":\"application/json\"}}\x00\x00\x00\x00\x00\x00\x00\x00{\"hello\":\"world\"}"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+	})
+
+	t.Run("WriteHeader", func(t *testing.T) {
+		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+
+			// Writes to ResponseWriter are buffered,
+			// so multiple writes to ResponseWriter become a single write to the pipe
+			if _, err := io.WriteString(w, `{"hello":`); err != nil {
+				t.Error(err)
+			}
+			if _, err := io.WriteString(w, `"world"}`); err != nil {
+				t.Error(err)
+			}
+		}))
+		r, w := io.Pipe()
+		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			RequestContext: requestContext{
+				HTTP: &requestContextHTTP{
+					Path: "/",
+				},
+			},
+		}, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := contentType, "application/vnd.awslambda.http-integration-response"; got != want {
+			t.Errorf("unexpected content type: want %q, got %q", want, got)
+		}
+
+		// Reads and Writes on the pipe are matched one to one,
+		// so we get only the header on first read.
+		buf := make([]byte, 1024)
+		n, err := r.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(buf[:n]), "{\"statusCode\":200,\"headers\":{\"Content-Type\":\"application/json\"}}\x00\x00\x00\x00\x00\x00\x00\x00"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+
+		// The second read gets the body.
+		n, err = r.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(buf[:n]), "{\"hello\":\"world\"}"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+
+		// The third read gets EOF.
+		n, err = r.Read(buf)
+		if err != io.EOF {
+			t.Errorf("unexpected error: want %v, got %v", io.EOF, err)
+		}
+		if n != 0 {
+			t.Errorf("unexpected read size: want %d, got %d", 0, n)
+		}
+	})
+
+	t.Run("flush", func(t *testing.T) {
+		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			f, ok := w.(http.Flusher)
+			if !ok {
+				t.Error("http.ResponseWriter doesn't implement http.Flusher")
+			}
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusOK)
+
+			if _, err := io.WriteString(w, `{"hello":`); err != nil {
+				t.Error(err)
+			}
+			f.Flush()
+			if _, err := io.WriteString(w, `"world"}`); err != nil {
+				t.Error(err)
+			}
+		}))
+		r, w := io.Pipe()
+		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			RequestContext: requestContext{
+				HTTP: &requestContextHTTP{
+					Path: "/",
+				},
+			},
+		}, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := contentType, "application/vnd.awslambda.http-integration-response"; got != want {
+			t.Errorf("unexpected content type: want %q, got %q", want, got)
+		}
+
+		// Reads and Writes on the pipe are matched one to one,
+		// so we get only the header on first read.
+		buf := make([]byte, 1024)
+		n, err := r.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(buf[:n]), "{\"statusCode\":200,\"headers\":{\"Content-Type\":\"application/json\"}}\x00\x00\x00\x00\x00\x00\x00\x00"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+
+		// The second read gets the half of the body.
+		n, err = r.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(buf[:n]), "{\"hello\":"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+
+		// The third read gets the rest of the body.
+		n, err = r.Read(buf)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(buf[:n]), "\"world\"}"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+
+		// The forth read gets EOF.
+		n, err = r.Read(buf)
+		if err != io.EOF {
+			t.Errorf("unexpected error: want %v, got %v", io.EOF, err)
+		}
+		if n != 0 {
+			t.Errorf("unexpected read size: want %d, got %d", 0, n)
+		}
+	})
+
+	t.Run("detect content-type", func(t *testing.T) {
+		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if _, err := io.WriteString(w, `<html></html>`); err != nil {
+				t.Error(err)
+			}
+		}))
+		r, w := io.Pipe()
+		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			RequestContext: requestContext{
+				HTTP: &requestContextHTTP{
+					Path: "/",
+				},
+			},
+		}, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := contentType, "application/vnd.awslambda.http-integration-response"; got != want {
+			t.Errorf("unexpected content type: want %q, got %q", want, got)
+		}
+
+		data, err := io.ReadAll(r)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got, want := string(data), "{\"statusCode\":200,\"headers\":{\"Content-Type\":\"text/html; charset=utf-8\"}}\x00\x00\x00\x00\x00\x00\x00\x00<html></html>"; got != want {
+			t.Errorf("unexpected body: want %q, got %q", want, got)
+		}
+	})
 }
