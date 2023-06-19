@@ -574,9 +574,9 @@ func (f *lambdaFunction) lambdaHandlerStreaming(ctx context.Context, req *reques
 		rw := newStreamingResponseWriter(w)
 		defer func() {
 			if v := recover(); v != nil {
-				rw.closeWithError(lambdaPanicResponse(v))
+				_ = rw.closeWithError(lambdaPanicResponse(v))
 			} else {
-				rw.close()
+				_ = rw.close()
 			}
 		}()
 		f.mux.ServeHTTP(rw, r)

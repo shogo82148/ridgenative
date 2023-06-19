@@ -762,7 +762,9 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 	t.Run("normal", func(t *testing.T) {
 		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			io.WriteString(w, `{"hello":"world"}`)
+			if _, err := io.WriteString(w, `{"hello":"world"}`); err != nil {
+				t.Error(err)
+			}
 		}))
 		r, w := io.Pipe()
 		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
@@ -794,8 +796,12 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 
 			// Writes to ResponseWriter are buffered,
 			// so multiple writes to ResponseWriter become a single write to the pipe
-			io.WriteString(w, `{"hello":`)
-			io.WriteString(w, `"world"}`)
+			if _, err := io.WriteString(w, `{"hello":`); err != nil {
+				t.Error(err)
+			}
+			if _, err := io.WriteString(w, `"world"}`); err != nil {
+				t.Error(err)
+			}
 		}))
 		r, w := io.Pipe()
 		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
@@ -851,9 +857,13 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(http.StatusOK)
 
-			io.WriteString(w, `{"hello":`)
+			if _, err := io.WriteString(w, `{"hello":`); err != nil {
+				t.Error(err)
+			}
 			f.Flush()
-			io.WriteString(w, `"world"}`)
+			if _, err := io.WriteString(w, `"world"}`); err != nil {
+				t.Error(err)
+			}
 		}))
 		r, w := io.Pipe()
 		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
@@ -911,7 +921,9 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 
 	t.Run("detect content-type", func(t *testing.T) {
 		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			io.WriteString(w, `<html></html>`)
+			if _, err := io.WriteString(w, `<html></html>`); err != nil {
+				t.Error(err)
+			}
 		}))
 		r, w := io.Pipe()
 		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
