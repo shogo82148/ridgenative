@@ -1,6 +1,6 @@
 # API Gateway V2 example of ridgenative
 
-It is a saying hello example on API Gateway V1.
+It is a saying hello example on API Gateway V2.
 
 ```
 $ curl -F name=shogo https://xxxxxxx.execute-api.ap-northeast-1.amazonaws.com/hello
