@@ -1,6 +1,6 @@
-# API Gateway V2 example of ridgenative
+# Lambda Function URLs example of ridgenative
 
-It is a saying hello example on API Gateway V1.
+It is a saying hello example on Lambda Function URLs.
 
 ```
 $ curl -F name=shogo https://xxxxxxx.lambda-url.ap-northeast-1.on.aws/hello
@@ -17,10 +17,10 @@ $ curl -F name=shogo http://localhost:8080/hello
 Hello shogo
 ```
 
-## Run on AWS Lambda with API Gateway
+## Run on AWS Lambda
 
 [template.yaml](template.yaml) is [AWS Serverless Application Model template](https://github.com/awslabs/serverless-application-model/blob/master/versions/2016-10-31.md) file.
-You can run this sample on AWS with API gateway proxy integration.
+You can run this sample on AWS with Lambda Function URLs.
 
 ```
 $ ./deploy.sh $YOUR_S3_BUCKET_NAME $YOUR_STACK_NAME
