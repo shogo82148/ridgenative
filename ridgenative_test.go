@@ -965,6 +965,10 @@ func TestIsBinary(t *testing.T) {
 		{"application/foo+xml", false},
 		{"application/foo+xml ; charset=utf8", false},
 		{"application/octet-stream", true},
+		{"image/jpeg", true},
+		{"audio/mpeg", true},
+		{"unknown-content-type", true},
+		{"", true},
 	}
 
 	for _, tt := range tests {
