@@ -949,3 +949,32 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 		}
 	})
 }
+
+func TestIsBinary(t *testing.T) {
+	tests := []struct {
+		contentType string
+		want        bool
+	}{
+		{"text/html", false},
+		{"text/plain", false},
+		{"text/xml", false},
+		{"application/json", false},
+		{"application/javascript", false},
+		{"application/xml", false},
+		{"application/foo+json", false},
+		{"application/foo+xml", false},
+		{"application/foo+xml ; charset=utf8", false},
+		{"application/octet-stream", true},
+		{"image/jpeg", true},
+		{"audio/mpeg", true},
+		{"unknown-content-type", true},
+		{"", true},
+	}
+
+	for _, tt := range tests {
+		got := isBinary(tt.contentType)
+		if got != tt.want {
+			t.Errorf("isBinary(%q) = %v, want %v", tt.contentType, got, tt.want)
+		}
+	}
+}
