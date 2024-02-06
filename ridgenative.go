@@ -341,7 +341,7 @@ func (rw *responseWriter) encodeBody() string {
 	}
 
 	if typ := rw.header.Get("Content-Type"); typ != "" {
-		rw.isBinary = isBinary(typ)
+		rw.isBinary = isBinary(rw.header)
 	} else {
 		rw.detectContentType()
 	}
@@ -356,11 +356,27 @@ func (rw *responseWriter) encodeBody() string {
 func (rw *responseWriter) detectContentType() {
 	contentType := http.DetectContentType(rw.w.Bytes())
 	rw.header.Set("Content-Type", contentType)
-	rw.isBinary = isBinary(contentType)
+	rw.isBinary = isBinary(rw.header)
 }
 
 // assume text/*, application/json, application/javascript, application/xml, */*+json, */*+xml as text
-func isBinary(contentType string) bool {
+func isBinary(headers http.Header) bool {
+	contentEncoding := headers.Values("Content-Encoding")
+	if len(contentEncoding) > 0 {
+		// typically, gzip, deflate, br, etc.
+		// these compressed encodings are not text, they are binary.
+		return true
+	}
+
+	// custom content encoding for Lambda
+	// it is compatible with AWS Lambda Rust Runtime.
+	// https://github.com/awslabs/aws-lambda-rust-runtime/blob/11d5669542d38ba2e1b5aa2d64b8e445d93718ea/lambda-http/src/response.rs#L303-L307
+	lambdaContentEncoding := headers.Get("X-Lambda-Http-Content-Encoding")
+	if lambdaContentEncoding == "text" {
+		return false
+	}
+
+	contentType := headers.Get("Content-Type")
 	i := strings.Index(contentType, ";")
 	if i == -1 {
 		i = len(contentType)
@@ -372,6 +388,7 @@ func isBinary(contentType string) bool {
 	}
 	mainType := mediaType[:i]
 
+	// common text mime types
 	if strings.EqualFold(mainType, "text") {
 		return false
 	}
@@ -388,6 +405,7 @@ func isBinary(contentType string) bool {
 		return false
 	}
 
+	// custom text mime types, such as application/*+json, application/*+xml
 	i = strings.LastIndex(mediaType, "+")
 	if i == -1 {
 		i = 0
@@ -402,6 +420,8 @@ func isBinary(contentType string) bool {
 	if strings.EqualFold(suffix, "+xml") {
 		return false
 	}
+
+	// assume it's binary
 	return true
 }
 
