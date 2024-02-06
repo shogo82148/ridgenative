@@ -258,7 +258,7 @@ func relevantCaller() runtime.Frame {
 	var frame runtime.Frame
 	for {
 		frame, more := frames.Next()
-		if !strings.HasPrefix(frame.Function, "net/http.") {
+		if !strings.HasPrefix(frame.Function, "github.com/shogo82148/ridgenative.") {
 			return frame
 		}
 		if !more {
