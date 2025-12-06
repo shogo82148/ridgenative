@@ -592,7 +592,15 @@ func (rw *streamingResponseWriter) Flush() {
 }
 
 func (f *lambdaFunction) lambdaHandlerStreaming(ctx context.Context, req *request, w *io.PipeWriter) (string, error) {
-	r, err := f.httpRequestV2(ctx, req)
+	var r *http.Request
+	var err error
+	if isV2Request(req) {
+		// Lambda Function URLs or API Gateway v2
+		r, err = f.httpRequestV2(ctx, req)
+	} else {
+		// API Gateway v1 or ALB
+		r, err = f.httpRequestV1(ctx, req)
+	}
 	if err != nil {
 		return "", err
 	}

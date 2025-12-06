@@ -768,6 +768,7 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 		}))
 		r, w := io.Pipe()
 		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			Version: "2.0",
 			RequestContext: requestContext{
 				HTTP: &requestContextHTTP{
 					Path: "/",
@@ -805,6 +806,7 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 		}))
 		r, w := io.Pipe()
 		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			Version: "2.0",
 			RequestContext: requestContext{
 				HTTP: &requestContextHTTP{
 					Path: "/",
@@ -867,6 +869,7 @@ func TestLambdaHandlerStreaming(t *testing.T) {
 		}))
 		r, w := io.Pipe()
 		contentType, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			Version: "2.0",
 			RequestContext: requestContext{
 				HTTP: &requestContextHTTP{
 					Path: "/",
