@@ -58,7 +58,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: example
-      Runtime: provided.al2
+      Runtime: provided.al2023
       Timeout: 30
       CodeUri: dist
       Events:
@@ -82,7 +82,7 @@ Resources:
     Type: AWS::Serverless::Function
     Properties:
       Handler: example
-      Runtime: provided.al2
+      Runtime: provided.al2023
       Timeout: 30
       CodeUri: dist
       Events:
@@ -104,7 +104,7 @@ Resources:
       Code: dist
       Handler: example
       Role: !GetAtt ExecutionRole.Arn
-      Runtime: provided.al2
+      Runtime: provided.al2023
       Timeout: 30
 
   ExecutionRole:
@@ -161,7 +161,7 @@ Resources:
       Code: dist
       Handler: example
       Role: !GetAtt ExecutionRole.Arn
-      Runtime: provided.al2
+      Runtime: provided.al2023
       Timeout: 30
 
   LambdaUrls:
@@ -209,7 +209,7 @@ Resources:
       Code: dist
       Handler: example
       Role: !GetAtt ExecutionRole.Arn
-      Runtime: provided.al2
+      Runtime: provided.al2023
       Timeout: 30
 
       # configure environment values to enable response streaming
