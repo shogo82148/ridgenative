@@ -685,7 +685,7 @@ func ListenAndServe(address string, mux http.Handler) error {
 		return http.ListenAndServe(address, mux)
 	}
 
-	// run on provided or provided.al2 runtime
+	// run on provided runtimes
 	var mode InvokeMode
 	switch os.Getenv("RIDGENATIVE_INVOKE_MODE") {
 	case "BUFFERED", "":

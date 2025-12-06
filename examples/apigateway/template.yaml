@@ -1,5 +1,5 @@
-AWSTemplateFormatVersion: '2010-09-09'
-Transform: 'AWS::Serverless-2016-10-31'
+AWSTemplateFormatVersion: "2010-09-09"
+Transform: "AWS::Serverless-2016-10-31"
 Description: an example of shogo82148/ridgenative
 Resources:
   ExampleApi:
@@ -7,7 +7,7 @@ Resources:
     Properties:
       CodeUri: dist
       Handler: bootstrap
-      Runtime: provided.al2
+      Runtime: provided.al2023
       Timeout: 3
       Events:
         Proxy:
