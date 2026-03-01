@@ -116,7 +116,7 @@ func formatFrame(inputFrame runtime.Frame) *invokeResponseErrorStackFrame {
 // getPanicInfo returns the type name of err.
 func getErrorType(err any) string {
 	errorType := reflect.TypeOf(err)
-	if errorType.Kind() == reflect.Ptr {
+	if errorType.Kind() == reflect.Pointer {
 		return errorType.Elem().Name()
 	}
 	return errorType.Name()
