@@ -49,15 +49,15 @@ type request struct {
 
 type requestContext struct {
 	// for API Gateway events
-	AccountID    string                 `json:"accountId"`
-	ResourceID   string                 `json:"resourceId"`
-	Stage        string                 `json:"stage"`
-	RequestID    string                 `json:"requestId"`
-	Identity     requestIdentity        `json:"identity"`
-	ResourcePath string                 `json:"resourcePath"`
-	Authorizer   map[string]interface{} `json:"authorizer"`
-	HTTPMethod   string                 `json:"httpMethod"`
-	APIID        string                 `json:"apiId"` // The API Gateway rest API Id
+	AccountID    string          `json:"accountId"`
+	ResourceID   string          `json:"resourceId"`
+	Stage        string          `json:"stage"`
+	RequestID    string          `json:"requestId"`
+	Identity     requestIdentity `json:"identity"`
+	ResourcePath string          `json:"resourcePath"`
+	Authorizer   map[string]any  `json:"authorizer"`
+	HTTPMethod   string          `json:"httpMethod"`
+	APIID        string          `json:"apiId"` // The API Gateway rest API Id
 
 	// for API Gateway v2 events
 	HTTP *requestContextHTTP `json:"http"`
