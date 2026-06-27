@@ -194,7 +194,7 @@ func (f *lambdaFunction) httpRequestV2(ctx context.Context, r *request) (*http.R
 		return nil, err
 	}
 
-	remoteHost := r.RequestContext.Identity.SourceIP
+	remoteHost := r.RequestContext.HTTP.SourceIP
 	if remoteHost == "" {
 		// fallback to localhost if SourceIP is empty.
 		// Many middleware solutions treat 127.0.0.1 as a trusted proxy.

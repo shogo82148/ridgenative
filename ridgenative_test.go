@@ -259,8 +259,8 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != 0 {
 			t.Errorf("unexpected ContentLength: want %d, got %d", 0, httpReq.ContentLength)
 		}
-		if httpReq.RemoteAddr != "127.0.0.1:1234" {
-			t.Errorf("unexpected RemoteAddr: want %q, got %q", "127.0.0.1:1234", httpReq.RemoteAddr)
+		if httpReq.RemoteAddr != "192.0.2.1:1234" {
+			t.Errorf("unexpected RemoteAddr: want %q, got %q", "192.0.2.1:1234", httpReq.RemoteAddr)
 		}
 
 		body, err := io.ReadAll(httpReq.Body)
@@ -293,8 +293,8 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		if httpReq.RemoteAddr != "127.0.0.1:1234" {
-			t.Errorf("unexpected RemoteAddr: want %q, got %q", "127.0.0.1:1234", httpReq.RemoteAddr)
+		if httpReq.RemoteAddr != "192.0.2.1:1234" {
+			t.Errorf("unexpected RemoteAddr: want %q, got %q", "192.0.2.1:1234", httpReq.RemoteAddr)
 		}
 
 		body, err := io.ReadAll(httpReq.Body)
@@ -327,8 +327,8 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.ContentLength != int64(len("{\"hello\":\"world\"}")) {
 			t.Errorf("unexpected ContentLength: want %d, got %d", int64(len("{\"hello\":\"world\"}")), httpReq.ContentLength)
 		}
-		if httpReq.RemoteAddr != "127.0.0.1:1234" {
-			t.Errorf("unexpected RemoteAddr: want %q, got %q", "127.0.0.1:1234", httpReq.RemoteAddr)
+		if httpReq.RemoteAddr != "192.0.2.1:1234" {
+			t.Errorf("unexpected RemoteAddr: want %q, got %q", "192.0.2.1:1234", httpReq.RemoteAddr)
 		}
 
 		body, err := io.ReadAll(httpReq.Body)
@@ -374,8 +374,8 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.Host != "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws" {
 			t.Errorf("unexpected host: want %q, got %q", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws", httpReq.Host)
 		}
-		if httpReq.RemoteAddr != "127.0.0.1:1234" {
-			t.Errorf("unexpected RemoteAddr: want %q, got %q", "127.0.0.1:1234", httpReq.RemoteAddr)
+		if httpReq.RemoteAddr != "192.0.2.1:1234" {
+			t.Errorf("unexpected RemoteAddr: want %q, got %q", "192.0.2.1:1234", httpReq.RemoteAddr)
 		}
 	})
 
@@ -407,8 +407,8 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.Host != "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws" {
 			t.Errorf("unexpected host: want %q, got %q", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws", httpReq.Host)
 		}
-		if httpReq.RemoteAddr != "127.0.0.1:1234" {
-			t.Errorf("unexpected RemoteAddr: want %q, got %q", "127.0.0.1:1234", httpReq.RemoteAddr)
+		if httpReq.RemoteAddr != "192.0.2.1:1234" {
+			t.Errorf("unexpected RemoteAddr: want %q, got %q", "192.0.2.1:1234", httpReq.RemoteAddr)
 		}
 	})
 
@@ -440,8 +440,8 @@ func TestHTTPRequest(t *testing.T) {
 		if httpReq.Host != "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws" {
 			t.Errorf("unexpected host: want %q, got %q", "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx.lambda-url.ap-northeast-1.on.aws", httpReq.Host)
 		}
-		if httpReq.RemoteAddr != "127.0.0.1:1234" {
-			t.Errorf("unexpected RemoteAddr: want %q, got %q", "127.0.0.1:1234", httpReq.RemoteAddr)
+		if httpReq.RemoteAddr != "192.0.2.1:1234" {
+			t.Errorf("unexpected RemoteAddr: want %q, got %q", "192.0.2.1:1234", httpReq.RemoteAddr)
 		}
 	})
 }
