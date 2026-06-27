@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"net/textproto"
 	"net/url"
@@ -139,13 +140,20 @@ func (f *lambdaFunction) httpRequestV1(ctx context.Context, r *request) (*http.R
 		return nil, err
 	}
 
+	remoteHost := r.RequestContext.Identity.SourceIP
+	if remoteHost == "" {
+		// fallback to localhost if SourceIP is empty.
+		// Many middleware solutions treat 127.0.0.1 as a trusted proxy.
+		remoteHost = "127.0.0.1"
+	}
+
 	req := &http.Request{
 		Method:        r.HTTPMethod,
 		Proto:         "HTTP/1.0",
 		ProtoMajor:    1,
 		ProtoMinor:    0,
 		Header:        headers,
-		RemoteAddr:    r.RequestContext.Identity.SourceIP,
+		RemoteAddr:    net.JoinHostPort(remoteHost, "1234"),
 		ContentLength: contentLength,
 		Body:          body,
 		RequestURI:    uri,
@@ -186,13 +194,20 @@ func (f *lambdaFunction) httpRequestV2(ctx context.Context, r *request) (*http.R
 		return nil, err
 	}
 
+	remoteHost := r.RequestContext.Identity.SourceIP
+	if remoteHost == "" {
+		// fallback to localhost if SourceIP is empty.
+		// Many middleware solutions treat 127.0.0.1 as a trusted proxy.
+		remoteHost = "127.0.0.1"
+	}
+
 	req := &http.Request{
 		Method:        r.RequestContext.HTTP.Method,
 		Proto:         "HTTP/1.0",
 		ProtoMajor:    1,
 		ProtoMinor:    0,
 		Header:        headers,
-		RemoteAddr:    r.RequestContext.HTTP.SourceIP,
+		RemoteAddr:    net.JoinHostPort(remoteHost, "1234"),
 		ContentLength: contentLength,
 		Body:          body,
 		RequestURI:    rawURI,
