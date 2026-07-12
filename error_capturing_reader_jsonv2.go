@@ -38,9 +38,7 @@ func (r *errorCapturingReader) Read(p []byte) (int, error) {
 		lambdaErr := lambdaErrorResponse(err)
 		body, err := json.Marshal(lambdaErr)
 		if err != nil {
-			// marshaling lambdaErr always succeeds
-			// because lambdaErr doesn't have any functions and channels.
-			panic(err)
+			body = []byte(`{"message":"failed to marshal lambda error response","type":"error"}`)
 		}
 		r.trailer.Set(trailerLambdaErrorType, lambdaErr.Type)
 		r.trailer.Set(trailerLambdaErrorBody, base64.StdEncoding.EncodeToString(body))
