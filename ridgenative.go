@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"maps"
 	"net"
 	"net/http"
 	"net/textproto"
@@ -111,9 +112,7 @@ func (f *lambdaFunction) httpRequestV1(ctx context.Context, r *request) (*http.R
 	var values url.Values
 	if len(r.MultiValueQueryStringParameters) > 0 {
 		values = make(url.Values, len(r.MultiValueQueryStringParameters))
-		for k, v := range r.MultiValueQueryStringParameters {
-			values[k] = v
-		}
+		maps.Copy(values, r.MultiValueQueryStringParameters)
 	} else if len(r.QueryStringParameters) > 0 {
 		// fall back to queryStringParameters
 		values = make(url.Values, len(r.QueryStringParameters))
