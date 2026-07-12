@@ -251,8 +251,8 @@ type response struct {
 	StatusCode        int                 `json:"statusCode,omitempty"`
 	Headers           map[string]string   `json:"headers,omitempty"`
 	MultiValueHeaders map[string][]string `json:"multiValueHeaders,omitempty"`
-	Body              string              `json:"body,omitempty"`
-	IsBase64Encoded   bool                `json:"isBase64Encoded,omitempty"`
+	Body              string              `json:"body,omitzero"`
+	IsBase64Encoded   bool                `json:"isBase64Encoded,omitzero"`
 	Cookies           []string            `json:"cookies,omitempty"`
 }
 
