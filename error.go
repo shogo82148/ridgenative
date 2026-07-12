@@ -1,6 +1,7 @@
 package ridgenative
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 	"runtime"
@@ -138,7 +139,8 @@ func lambdaPanicResponse(err any) *invokeResponseError {
 
 // lambdaErrorResponse returns the error response for a non-panic error.
 func lambdaErrorResponse(invokeError error) *invokeResponseError {
-	if ive, ok := invokeError.(*invokeResponseError); ok {
+	var ive *invokeResponseError
+	if errors.As(invokeError, &ive) {
 		return ive
 	}
 	return &invokeResponseError{

@@ -767,7 +767,7 @@ func BenchmarkRequest_text(b *testing.B) {
 		b.Fatal(err)
 	}
 	data := make([]byte, 1<<20)
-	for i := 0; i < len(data); i++ {
+	for i := range data {
 		data[i] = 'a'
 	}
 	req.Body = string(data)
@@ -792,7 +792,7 @@ func BenchmarkResponse_binary(b *testing.B) {
 
 func BenchmarkResponse_text(b *testing.B) {
 	data := make([]byte, 1<<20) // 1MB: the maximum size of the response JSON in ALB
-	for i := 0; i < len(data); i++ {
+	for i := range data {
 		data[i] = 'a'
 	}
 	b.ResetTimer()
