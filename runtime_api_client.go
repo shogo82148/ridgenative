@@ -3,12 +3,8 @@ package ridgenative
 import (
 	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
 	"runtime"
@@ -176,19 +172,6 @@ func (c *runtimeAPIClient) post(ctx context.Context, path string, body []byte, c
 	return nil
 }
 
-// reportFailure reports the error to the Runtime API.
-func (c *runtimeAPIClient) reportFailure(ctx context.Context, invoke *invoke, invokeErr *invokeResponseError) error {
-	body, err := json.Marshal(invokeErr)
-	if err != nil {
-		return fmt.Errorf("ridgenative: failed to marshal the function error: %w", err)
-	}
-	log.Printf("%s", body)
-	if err := c.post(ctx, invoke.id+"/error", body, contentTypeJSON); err != nil {
-		return fmt.Errorf("ridgenative: unexpected error occurred when sending the function error to the API: %w", err)
-	}
-	return nil
-}
-
 type handlerFuncSteaming func(ctx context.Context, req *request, w *io.PipeWriter) (contentType string, err error)
 
 func (c *runtimeAPIClient) startStreaming(ctx context.Context, h handlerFuncSteaming) error {
@@ -269,51 +252,4 @@ func (c *runtimeAPIClient) postStreaming(ctx context.Context, path string, body 
 	}
 
 	return nil
-}
-
-// errorCapturingReader is a reader that captures the first error returned by the underlying reader.
-type errorCapturingReader struct {
-	reader  io.ReadCloser
-	err     error
-	trailer http.Header
-}
-
-func newErrorCapturingReader(r io.ReadCloser) *errorCapturingReader {
-	return &errorCapturingReader{
-		reader:  r,
-		trailer: http.Header{},
-	}
-}
-
-func (r *errorCapturingReader) Read(p []byte) (int, error) {
-	if r.reader == nil {
-		return 0, io.EOF
-	}
-	if r.err != nil {
-		return 0, r.err
-	}
-
-	n, err := r.reader.Read(p)
-	if err != nil && !errors.Is(err, io.EOF) {
-		// capture the error
-		lambdaErr := lambdaErrorResponse(err)
-		body, err := json.Marshal(lambdaErr)
-		if err != nil {
-			// marshaling lambdaErr always succeeds
-			// because lambdaErr doesn't have any functions and channels.
-			panic(err)
-		}
-		r.trailer.Set(trailerLambdaErrorType, lambdaErr.Type)
-		r.trailer.Set(trailerLambdaErrorBody, base64.StdEncoding.EncodeToString(body))
-		r.err = io.EOF
-		return n, io.EOF
-	}
-	return n, err
-}
-
-func (r *errorCapturingReader) Close() error {
-	if r.reader == nil {
-		return nil
-	}
-	return r.reader.Close()
 }

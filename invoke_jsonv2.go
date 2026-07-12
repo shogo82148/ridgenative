@@ -1,10 +1,10 @@
-//go:build !go1.27
+//go:build go1.27
 
 package ridgenative
 
 import (
 	"context"
-	"encoding/json"
+	"encoding/json/v2"
 	"io"
 	"net/http"
 )
