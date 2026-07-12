@@ -154,5 +154,7 @@ func (rw *streamingResponseWriter) Flush() {
 	if !rw.wroteHeader {
 		rw.WriteHeader(http.StatusOK)
 	}
-	rw.buf.Flush()
+	if err := rw.buf.Flush(); err != nil {
+		rw.err = err
+	}
 }

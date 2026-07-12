@@ -107,6 +107,9 @@ func (rw *streamingResponseWriter) hasContentType() bool {
 }
 
 func (rw *streamingResponseWriter) Write(data []byte) (int, error) {
+	if rw.err != nil {
+		return 0, rw.err
+	}
 	var m int
 	if !rw.wroteHeader {
 		if rw.hasContentType() {
@@ -154,5 +157,7 @@ func (rw *streamingResponseWriter) Flush() {
 	if !rw.wroteHeader {
 		rw.WriteHeader(http.StatusOK)
 	}
-	rw.buf.Flush()
+	if err := rw.buf.Flush(); err != nil {
+		rw.err = err
+	}
 }
