@@ -107,6 +107,9 @@ func (rw *streamingResponseWriter) hasContentType() bool {
 }
 
 func (rw *streamingResponseWriter) Write(data []byte) (int, error) {
+	if rw.err != nil {
+		return 0, rw.err
+	}
 	var m int
 	if !rw.wroteHeader {
 		if rw.hasContentType() {
@@ -127,6 +130,10 @@ func (rw *streamingResponseWriter) Write(data []byte) (int, error) {
 			if len(data) == 0 {
 				return m, nil
 			}
+		}
+		if rw.err != nil {
+			// failed to write the prelude; the body must not be written in its place.
+			return m, rw.err
 		}
 	}
 	n, err := rw.buf.Write(data)
