@@ -104,4 +104,34 @@ func TestLambdaHandlerStreaming_MarshalError(t *testing.T) {
 			t.Errorf("unexpected body: want empty, got %q", data)
 		}
 	})
+
+	t.Run("detect content-type exactly 512 bytes", func(t *testing.T) {
+		l := newLambdaFunction(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-Invalid-Utf8", "\xff")
+			// filling the 512 bytes buffer triggers WriteHeader,
+			// and its error must be returned.
+			if _, err := io.WriteString(w, strings.Repeat(" ", 512)); err == nil {
+				t.Error("want error, got nil")
+			}
+		}))
+		r, w := io.Pipe()
+		_, err := l.lambdaHandlerStreaming(context.Background(), &request{
+			Version: "2.0",
+			RequestContext: requestContext{
+				HTTP: &requestContextHTTP{
+					Path: "/",
+				},
+			},
+		}, w)
+		if err != nil {
+			t.Fatal(err)
+		}
+		data, err := io.ReadAll(r)
+		if err == nil {
+			t.Error("want error, got nil")
+		}
+		if len(data) != 0 {
+			t.Errorf("unexpected body: want empty, got %q", data)
+		}
+	})
 }
