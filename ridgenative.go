@@ -139,9 +139,13 @@ func (f *lambdaFunction) httpRequestV1(ctx context.Context, r *request) (*http.R
 
 	remoteHost := r.RequestContext.Identity.SourceIP
 	if remoteHost == "" {
-		// fallback to localhost if SourceIP is empty.
-		// Many middleware solutions treat 127.0.0.1 as a trusted proxy.
-		remoteHost = "127.0.0.1"
+		// fallback to the unspecified address if SourceIP is empty
+		// (e.g. ALB target events never include it).
+		// Do not use a loopback address here: the request comes from a remote
+		// client, so it must not pass localhost-only authorization checks.
+		// ALB callers should get the client IP from the X-Forwarded-For header
+		// appended by the ALB.
+		remoteHost = "0.0.0.0"
 	}
 
 	req := &http.Request{
@@ -193,9 +197,10 @@ func (f *lambdaFunction) httpRequestV2(ctx context.Context, r *request) (*http.R
 
 	remoteHost := r.RequestContext.HTTP.SourceIP
 	if remoteHost == "" {
-		// fallback to localhost if SourceIP is empty.
-		// Many middleware solutions treat 127.0.0.1 as a trusted proxy.
-		remoteHost = "127.0.0.1"
+		// fallback to the unspecified address if SourceIP is empty.
+		// Do not use a loopback address here: the request comes from a remote
+		// client, so it must not pass localhost-only authorization checks.
+		remoteHost = "0.0.0.0"
 	}
 
 	req := &http.Request{
