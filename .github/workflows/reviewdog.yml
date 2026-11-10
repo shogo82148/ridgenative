@@ -14,7 +14,7 @@ jobs:
           github_token: ${{ secrets.github_token }}
           level: warning
       - name: misspell
-        uses: reviewdog/action-misspell@v1.30.4
+        uses: reviewdog/action-misspell@v1.30.5
         with:
           github_token: ${{ secrets.github_token }}
           locale: "US"
